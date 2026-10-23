@@ -15,6 +15,7 @@ import { EnergySum } from './EnergySum';
 import { PresenceSection } from './PresenceSection';
 import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
+import { QuickPanel } from './QuickPanel';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
 
@@ -98,6 +99,16 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
             )}
             <button onClick={loadRooms}>Oppdater</button>
           </div>
+        )}
+
+        {houseId && (
+          <QuickPanel
+            rooms={rooms}
+            onRoomsChanged={() => {
+              loadRooms();
+              setReloadKey((k) => k + 1);
+            }}
+          />
         )}
 
         <PresenceSection />
