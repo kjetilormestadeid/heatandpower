@@ -45,3 +45,15 @@ Tokenet blir på serveren; nettleseren får bare data, og kun når man er innlog
 - Refresh-token kan bare brukes én gang; sesjoner lagres i `data/sessions.json` så de overlever omstart. Ikke sjekk inn denne mappen.
 - Konto-/auth-endepunkter (slett konto, bytt passord osv.) er blokkert i proxyen.
 - Sett `COOKIE_SECURE=true` når siten kjører bak HTTPS.
+
+## Android-nettbrett (Termux)
+
+Kjør serveren og den ferdigbygde frontenden (`dist/`, sjekket inn) lokalt på et nettbrett, med autostart via Termux:Boot:
+
+```sh
+pkg install -y git && git clone https://github.com/kjetilormestadeid/heatandpower.git ~/heatandpower
+sh ~/heatandpower/scripts/setup-android.sh
+```
+
+Skriptet kan kjøres på nytt for å oppdatere. Logg: `~/heatandpower.log`. Stopp: `kill $(cat ~/.heatandpower.pid)`.
+Husk `npm run build` og å sjekke inn `dist/` på PC-en før du oppdaterer nettbrettet.
