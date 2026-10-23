@@ -540,3 +540,4 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .quick-tile.stale::after { opacity: 0 !important; }
 .quick-energy.stale { position: relative; padding-top: 24px; }
 .quick-energy.stale .quick-stale { top: 0; left: 0; right: auto; }
+.quick-tile.stale .quick-head, .cal-ticker.stale .cal-ticker-item { padding-right: 100px; } /* plass til merkelappen, navnet kuttes med … */

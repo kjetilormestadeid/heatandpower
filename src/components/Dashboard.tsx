@@ -17,6 +17,7 @@ import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { QuickPanel } from './QuickPanel';
 import { Clock } from './Clock';
+import { pollWithBackoff } from '../useServicePoll';
 import { CalendarDrawer, refreshCalendar } from './CalendarDrawer';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
@@ -44,8 +45,9 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
     );
   }, []);
 
+  /** true når hentingen lyktes – brukes til å trappe ned nye forsøk når Mill er nede */
   const loadRooms = useCallback(async () => {
-    if (!houseId) return;
+    if (!houseId) return false;
     try {
       const [r, p] = await Promise.all([api.rooms(houseId), api.roomPrograms(houseId)]);
       setPrograms(p.items);
@@ -54,9 +56,11 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
       setUpdatedAt(new Date());
       setError(null);
       setRoomsDown(false);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kunne ikke hente rom');
       setRoomsDown(true);
+      return false;
     }
   }, [houseId]);
 
@@ -64,9 +68,7 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
     if (!houseId) return;
     localStorage.setItem('mill.houseId', houseId);
     setRooms(null);
-    loadRooms();
-    const t = setInterval(() => document.visibilityState === 'visible' && loadRooms(), POLL_MS);
-    return () => clearInterval(t);
+    return pollWithBackoff(loadRooms, POLL_MS);
   }, [houseId, loadRooms]);
 
   const house = houses?.find((h) => h.id === houseId);

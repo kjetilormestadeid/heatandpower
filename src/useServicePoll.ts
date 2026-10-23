@@ -6,7 +6,33 @@ export const OFF = Symbol('off');
 // Nede: prøv igjen etter 15 s, så 30 s, 60 s, 120 s, 240 s – deretter hvert 5. minutt til den svarer
 const RETRY_FIRST_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
-const retryDelay = (failures: number) => Math.min(RETRY_FIRST_MS * 2 ** (failures - 1), RETRY_MAX_MS);
+export const retryDelay = (failures: number) => Math.min(RETRY_FIRST_MS * 2 ** (failures - 1), RETRY_MAX_MS);
+
+/**
+ * Kjører `run` nå og så hvert `everyMs` mens fanen er synlig. Returnerer `run` false (feilet),
+ * trappes pausen ned som i useServicePoll til den lykkes igjen. Gir tilbake en stopp-funksjon.
+ */
+export function pollWithBackoff(run: () => Promise<boolean>, everyMs: number) {
+  let stop = false;
+  let t: number | undefined;
+  let failures = 0;
+  let first = true;
+  const schedule = () => (t = window.setTimeout(tick, failures ? retryDelay(failures) : everyMs));
+  async function tick() {
+    if (first || document.visibilityState === 'visible') {
+      first = false;
+      const ok = await run().catch(() => false);
+      if (stop) return;
+      failures = ok ? 0 : failures + 1;
+    }
+    schedule();
+  }
+  tick();
+  return () => {
+    stop = true;
+    window.clearTimeout(t);
+  };
+}
 
 /**
  * Henter data jevnlig og tåler at tjenesten er nede: ved feil beholdes siste data og `down` blir true,

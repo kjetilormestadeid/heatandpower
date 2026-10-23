@@ -3,6 +3,7 @@ import { api } from '../api';
 import type { EaseeCharger, EaseeChargerData, EaseeCommand } from '../types';
 import { BarChart } from './BarChart';
 import { Icon } from './Icon';
+import { pollWithBackoff } from '../useServicePoll';
 
 const POLL_MS = 30_000;
 
@@ -29,15 +30,23 @@ export function EaseeSection() {
   const [chargers, setChargers] = useState<EaseeCharger[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.easeeStatus().then(
-      (s) => {
-        setConfigured(s.configured);
-        if (s.configured) api.easeeChargers().then((r) => setChargers(r.chargers), (e) => setError(e.message));
-      },
-      (e) => setError(e.message),
-    );
-  }, []);
+  // Laderlisten endrer seg sjelden; feiler den (f.eks. Easee nede ved oppstart) prøves det igjen med økende pause
+  useEffect(
+    () =>
+      pollWithBackoff(async () => {
+        try {
+          const s = await api.easeeStatus();
+          setConfigured(s.configured);
+          if (s.configured) setChargers((await api.easeeChargers()).chargers);
+          setError(null);
+          return true;
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Fikk ikke kontakt med Easee');
+          return false;
+        }
+      }, 10 * 60_000),
+    [],
+  );
 
   if (configured === null && !error) return null;
 
@@ -72,15 +81,16 @@ function ChargerPanel({ charger, showName }: { charger: EaseeCharger; showName: 
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(
-    () => api.easeeCharger(charger.id).then((d) => (setData(d), setError(null)), (e) => setError(e.message)),
+    () =>
+      api.easeeCharger(charger.id).then(
+        (d) => (setData(d), setError(null), true),
+        (e) => (setError(e.message), false),
+      ),
     [charger.id],
   );
 
-  useEffect(() => {
-    load();
-    const t = setInterval(() => document.visibilityState === 'visible' && load(), POLL_MS);
-    return () => clearInterval(t);
-  }, [load]);
+  // Siste status blir stående ved feil; nye forsøk trappes ned til Easee svarer igjen
+  useEffect(() => pollWithBackoff(load, POLL_MS), [load]);
 
   async function command(cmd: EaseeCommand) {
     setBusy(true);
