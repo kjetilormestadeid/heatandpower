@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api';
 import { PROGRAM_DAYS, type ProgramDay, type ProgramEntry, type ProgramMode, type RoomProgram } from '../types';
 import { MODE_LABEL } from '../format';
+import { Icon } from './Icon';
 
 export const PROGRAM_MODES: ProgramMode[] = ['comfort', 'sleep', 'away', 'normal', 'always_heating', 'off'];
 
@@ -184,7 +185,7 @@ export function ProgramEditor({
                       <i className={`swatch mode-${e.mode}`} />
                       {!(e.min === 0 && i === 0) && (
                         <button className="icon" aria-label="Fjern tidspunkt" onClick={() => update(d, (list) => list.filter((_, j) => j !== i))}>
-                          ✕
+                          <Icon name="close" />
                         </button>
                       )}
                     </div>

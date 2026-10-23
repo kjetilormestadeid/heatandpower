@@ -10,6 +10,18 @@ import type {
   TibberHomeSummary,
   TibberOverview,
   RoomsResponse,
+  EaseeCharger,
+  EaseeChargerData,
+  EaseeCommand,
+  HueLight,
+  HueGroup,
+  TibberLive,
+  DecoOverview,
+  Person,
+  HumidityRule,
+  SonosCommand,
+  SonosOverview,
+  MillNetworkDiagnostics,
 } from './types';
 
 export class ApiError extends Error {
@@ -100,10 +112,58 @@ export const api = {
     mill('POST', `/devices/${deviceId}/timers/activate`, { timersToActivateIds: timerIds }),
 
   tibberStatus: () => request<{ configured: boolean }>('GET', '/api/tibber/status'),
+  tibberLive: () => request<{ live: TibberLive | null; error: string | null }>('GET', '/api/tibber/live'),
   tibberHomes: () => request<{ homes: TibberHomeSummary[] }>('GET', '/api/tibber/homes'),
   tibberOverview: (homeId: string, resolution: 'HOURLY' | 'QUARTER_HOURLY') =>
     request<TibberOverview>('GET', `/api/tibber/homes/${homeId}?resolution=${resolution}`),
 
+  easeeStatus: () => request<{ configured: boolean }>('GET', '/api/easee/status'),
+  easeeChargers: () => request<{ chargers: EaseeCharger[] }>('GET', '/api/easee/chargers'),
+  easeeCharger: (id: string) => request<EaseeChargerData>('GET', `/api/easee/chargers/${encodeURIComponent(id)}`),
+  easeeCommand: (id: string, command: EaseeCommand) =>
+    request('POST', `/api/easee/chargers/${encodeURIComponent(id)}/${command}`),
+
+  humidityRules: () => request<{ rules: HumidityRule[] }>('GET', '/api/automations/humidity'),
+  saveHumidityRule: (rule: Omit<HumidityRule, 'last'>) =>
+    request<{ rule: HumidityRule }>('PUT', `/api/automations/humidity/${encodeURIComponent(rule.deviceId)}`, rule),
+
+  sonosStatus: () => request<{ configured: boolean; connected: boolean }>('GET', '/api/sonos/status'),
+  sonosComplete: (url: string) => request('POST', '/api/sonos/complete', { url }),
+  sonosLogout: () => request('POST', '/api/sonos/logout'),
+  sonosOverview: () => request<SonosOverview>('GET', '/api/sonos/overview'),
+  sonosPauseAll: () => request('POST', '/api/sonos/pause-all'),
+  sonosCommand: (groupId: string, cmd: SonosCommand) => request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/${cmd}`),
+  sonosVolume: (groupId: string, volume: number) => request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/volume`, { volume }),
+  sonosFavorite: (groupId: string, favoriteId: string) =>
+    request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/favorite`, { favoriteId }),
+
+  millNetworkDiagnostics: () => request<MillNetworkDiagnostics>('GET', '/api/diagnostics/mill-network'),
+
+  decoStatus: () => request<{ configured: boolean }>('GET', '/api/deco/status'),
+  decoOverview: () => request<DecoOverview>('GET', '/api/deco/overview'),
+  decoSetOwner: (mac: string, name: string) =>
+    request<{ people: Person[] }>('PUT', `/api/deco/owners/${encodeURIComponent(mac)}`, { name }),
+
+  hueStatus: () => request<{ configured: boolean; connected: boolean }>('GET', '/api/hue/status'),
+  hueLights: () => request<{ lights: HueLight[] }>('GET', '/api/hue/lights'),
+  hueSetLight: (id: string, on: boolean) => request('PUT', `/api/hue/lights/${encodeURIComponent(id)}`, { on }),
+  hueGroups: () => request<{ groups: HueGroup[] }>('GET', '/api/hue/groups'),
+  hueSetGroup: (id: string, on: boolean) => request('PUT', `/api/hue/groups/${encodeURIComponent(id)}`, { on }),
+  hueDimLight: (id: string, brightness: number) => request('PUT', `/api/hue/lights/${encodeURIComponent(id)}`, { brightness }),
+  hueDimGroup: (id: string, brightness: number) => request('PUT', `/api/hue/groups/${encodeURIComponent(id)}`, { brightness }),
+  hueIdentifyLight: (id: string) => request('PUT', `/api/hue/lights/${encodeURIComponent(id)}`, { identify: true }),
+  hueRenameLight: (id: string, name: string) => request('PUT', `/api/hue/lights/${encodeURIComponent(id)}`, { name }),
+  hueRenameGroup: (kind: 'room' | 'zone', id: string, name: string) =>
+    request('PUT', `/api/hue/${kind}s/${encodeURIComponent(id)}`, { name }),
+  hueLogout: () => request('POST', '/api/hue/logout'),
+
+  houseStatisticsHourly: (houseId: string, date: Date) =>
+    mill<HouseStatistics>('POST', `/houses/${houseId}/statistics`, {
+      period: 'hourly',
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+    }),
   houseStatistics: (houseId: string, year: number, month: number) =>
     mill<HouseStatistics>('POST', `/houses/${houseId}/statistics`, { period: 'daily', year, month }),
 };

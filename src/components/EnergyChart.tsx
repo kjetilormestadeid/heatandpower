@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { HouseStatistics, StatItem } from '../types';
-import { fmtKwh, fmtMoney } from '../format';
+import { fmtKwh, fmtMoney, statStart } from '../format';
+import { Icon } from './Icon';
 
 const H = 180;
 const PAD = { top: 12, right: 8, bottom: 22, left: 44 };
@@ -34,9 +35,9 @@ export function EnergyChart({ houseId }: { houseId: string }) {
       <div className="section-head">
         <h2>Strømforbruk per dag (Mill-enheter)</h2>
         <div className="spacer" />
-        <button aria-label="Forrige måned" onClick={() => shift(-1)}>‹</button>
+        <button aria-label="Forrige måned" onClick={() => shift(-1)}><Icon name="chevron-left" /></button>
         <span className="month">{monthLabel}</span>
-        <button aria-label="Neste måned" onClick={() => shift(1)} disabled={isCurrent}>›</button>
+        <button aria-label="Neste måned" onClick={() => shift(1)} disabled={isCurrent}><Icon name="chevron-right" /></button>
       </div>
 
       {error && <p className="error small">{error}</p>}
@@ -130,7 +131,7 @@ function Bars({
         {items.map((it, i) => {
           const x = PAD.left + i * slot + 1;
           const h = Math.max(0, PAD.top + innerH - y(it.value));
-          const day = new Date(it.startTimestamp * 1000).getDate();
+          const day = statStart(it).getDate();
           return (
             <g key={it.startTimestamp} onMouseEnter={() => setHover(i)}>
               <rect className="hit" x={PAD.left + i * slot} y={PAD.top} width={slot} height={innerH} />
@@ -147,7 +148,7 @@ function Bars({
       {hovered && (
         <div className="tooltip" style={{ left: `${((PAD.left + (hover! + 0.5) * slot) / W) * 100}%` }}>
           <div className="muted small">
-            {new Date(hovered.startTimestamp * 1000).toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })}
+            {statStart(hovered).toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
           <strong>{fmtKwh(hovered.value)}</strong>
         </div>

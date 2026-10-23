@@ -3,6 +3,7 @@ import { api } from '../api';
 import type { OverrideMode, Room, RoomProgram } from '../types';
 import { MODE_LABEL, fmtKwh, fmtTemp, fmtTime } from '../format';
 import { DeviceList } from './DeviceList';
+import { Icon } from './Icon';
 
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
 const TEMPS: { key: TempKey; label: string }[] = [
@@ -96,19 +97,19 @@ export function RoomCard({ room, programs, onChanged }: { room: Room; programs: 
           <h3>
             {room.name}
             <button className="icon" aria-label="Gi rommet nytt navn" title="Gi nytt navn" onClick={() => setEditingName(room.name)}>
-              ✎
+              <Icon name="pencil" />
             </button>
           </h3>
         )}
-        {room.roomHeatStatus && <span className="pill heat" title="Varmer nå">🔥 Varmer</span>}
-        {room.roomOpenWindowStatus && <span className="pill warn" title="Åpent vindu oppdaget">Åpent vindu</span>}
+        {room.roomHeatStatus && <span className="pill heat" title="Varmer nå"><Icon name="flame" /> Varmer</span>}
+        {room.roomOpenWindowStatus && <span className="pill warn" title="Åpent vindu oppdaget"><Icon name="window" /> Åpent vindu</span>}
         {!room.isRoomOnline && <span className="pill warn">Frakoblet</span>}
       </div>
 
       <div className="room-now">
         <div className="big">{fmtTemp(room.averageTemperature)}</div>
         <div className="room-meta">
-          {room.roomHumidity != null && <span>💧 {Math.round(room.roomHumidity)} %</span>}
+          {room.roomHumidity != null && <span className="with-icon"><Icon name="droplet" /> {Math.round(room.roomHumidity)} %</span>}
           <span>
             {MODE_LABEL[effective ?? 'weekly_program']}
             {room.mode === 'weekly_program' && room.roomProgramName ? ` · ${room.roomProgramName}` : ''}
@@ -129,7 +130,7 @@ export function RoomCard({ room, programs, onChanged }: { room: Room; programs: 
                 disabled={!room.changeTemperature || temps[key] == null}
                 onClick={() => adjust(key, -0.5)}
               >
-                −
+                <Icon name="minus" />
               </button>
               <span>{fmtTemp(temps[key])}</span>
               <button
@@ -137,7 +138,7 @@ export function RoomCard({ room, programs, onChanged }: { room: Room; programs: 
                 disabled={!room.changeTemperature || temps[key] == null}
                 onClick={() => adjust(key, 0.5)}
               >
-                +
+                <Icon name="plus" />
               </button>
             </div>
           </div>

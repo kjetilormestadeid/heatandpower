@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+.env
+.git
+ds-bundle
+.ds-sync
+.design-sync
+.remember
+.playwright-mcp

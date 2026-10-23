@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { WEEKDAYS, type Device, type DeviceTimer, type TimerSetting, type Weekday } from '../types';
+import { Icon } from './Icon';
 
 const DAY_SHORT: Record<Weekday, string> = {
   Monday: 'Man', Tuesday: 'Tir', Wednesday: 'Ons', Thursday: 'Tor', Friday: 'Fre', Saturday: 'Lør', Sunday: 'Søn',
@@ -109,17 +110,31 @@ function TimerEditor({ device }: { device: Device }) {
     load();
   }, [load]);
 
+  // Hindrer dobbel innsending før busy-staten rekker å deaktivere knappen
+  const inFlight = useRef(false);
+
   async function run(fn: () => Promise<unknown>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
       await fn();
-      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Noe gikk galt');
     } finally {
+      await load(); // vis faktisk tilstand også etter feil
+      inFlight.current = false;
       setBusy(false);
     }
+  }
+
+  /** Finnes det allerede en timer med samme tid, innstilling og dager? */
+  function exists(time: number, setting: TimerSetting, on: Weekday[]) {
+    const key = [...on].sort().join(',');
+    return (timers ?? []).some(
+      (t) => t.activationTime === time && t.setting === setting && [...(t.repeatOn ?? [])].sort().join(',') === key,
+    );
   }
 
   function addPeriod(e: FormEvent) {
@@ -131,12 +146,18 @@ function TimerEditor({ device }: { device: Device }) {
     const name = `${from}–${to}`;
     // Går perioden over midnatt, skal av-timeren trigge dagen etter.
     const offDays = end > start ? days : days.map(nextDay);
+    if (exists(start, onSetting, days) && exists(end, offSetting, offDays)) return setError('Denne perioden finnes allerede');
     run(async () => {
       const on = await api.createTimer(device.deviceId, { name: `På ${name}`, activationTime: start, repeatOn: days, setting: onSetting, isActive: true });
       try {
         await api.createTimer(device.deviceId, { name: `Av ${name}`, activationTime: end, repeatOn: offDays, setting: offSetting, isActive: true });
       } catch (err) {
-        await api.deleteTimer(device.deviceId, on.id).catch(() => {});
+        // Rull tilbake på-timeren, ellers blir den liggende alene og slår enheten på uten å slå den av
+        try {
+          await api.deleteTimer(device.deviceId, on.id);
+        } catch {
+          throw new Error(`Av-timeren feilet, og på-timeren kl. ${from} kunne ikke fjernes – slett den manuelt`);
+        }
         throw err;
       }
     });
@@ -187,7 +208,7 @@ function TimerEditor({ device }: { device: Device }) {
                 disabled={busy}
                 onClick={() => run(() => api.deleteTimer(device.deviceId, t.id))}
               >
-                ✕
+                <Icon name="close" />
               </button>
             </li>
           ))}

@@ -21,3 +21,6 @@ export const fmtMoney = (v: number) => v.toLocaleString('nb-NO', { maximumFracti
 
 export const fmtTime = (epochSec: number) =>
   new Date(epochSec * 1000).toLocaleString('nb-NO', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+
+/** Start på en Mill-statistikkperiode. startTimestamp er i millisekunder (ikke sekunder), så bruk ISO-feltet. */
+export const statStart = (it: { startPeriod: string }) => new Date(it.startPeriod);

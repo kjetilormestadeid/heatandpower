@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    image: heatandpower
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    ports:
+      # 3001 er opptatt av et annet prosjekt på maskinen
+      - "3002:3001"
+    volumes:
+      # sesjoner, Hue/Sonos-tokens, Deco-personer og automasjoner overlever omstart
+      - ./data:/app/data
+    restart: unless-stopped

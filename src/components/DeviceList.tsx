@@ -3,6 +3,8 @@ import { api } from '../api';
 import type { Device } from '../types';
 import { fmtKwh, fmtTemp } from '../format';
 import { TimerPlan } from './TimerPlan';
+import { Icon } from './Icon';
+import { HumidityControl } from './HumidityControl';
 
 type Source = { roomId: string; houseId?: never } | { houseId: string; roomId?: never };
 
@@ -12,6 +14,7 @@ export function DeviceList({ source, onMoved }: { source: Source; onMoved?: () =
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [planFor, setPlanFor] = useState<string | null>(null);
+  const [humFor, setHumFor] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const req = roomId
@@ -54,12 +57,27 @@ export function DeviceList({ source, onMoved }: { source: Source; onMoved?: () =
                 <div className="muted small">
                   {d.deviceType.parentType.name}
                   {m?.temperatureAmbient != null && ` · ${fmtTemp(m.temperatureAmbient)}`}
+                  {/* Ovner melder 0 – vis bare for enheter med fuktsensor (f.eks. stikkontakter) */}
+                  {m?.humidity != null && m.humidity > 0 && (
+                    <>
+                      {' · '}
+                      <span className="with-icon"><Icon name="droplet" /> {Math.round(m.humidity)} %</span>
+                    </>
+                  )}
                   {m?.currentPower != null && ` · ${Math.round(m.currentPower)} W`}
                   {` · i dag ${fmtKwh(d.energyUsageForCurrentDay)}`}
                 </div>
-                <button className="link small" onClick={() => setPlanFor((cur) => (cur === d.deviceId ? null : d.deviceId))}>
-                  {planFor === d.deviceId ? 'Skjul tidsplan' : 'Tidsplan'}
-                </button>
+                <div className="dev-links">
+                  <button className="link small" onClick={() => setPlanFor((cur) => (cur === d.deviceId ? null : d.deviceId))}>
+                    {planFor === d.deviceId ? 'Skjul tidsplan' : 'Tidsplan'}
+                  </button>
+                  {/* Fuktstyring for enheter med fuktsensor (stikkontakter) */}
+                  {(m?.humidity ?? 0) > 0 && d.houseId && (
+                    <button className="link small" onClick={() => setHumFor((cur) => (cur === d.deviceId ? null : d.deviceId))}>
+                      {humFor === d.deviceId ? 'Skjul fuktstyring' : 'Fuktstyring'}
+                    </button>
+                  )}
+                </div>
               </div>
               {d.isEnabled != null && (
                 <label className="switch" title={d.isEnabled ? 'Slå av' : 'Slå på'}>
@@ -73,6 +91,9 @@ export function DeviceList({ source, onMoved }: { source: Source; onMoved?: () =
                 </label>
               )}
             </div>
+            {humFor === d.deviceId && d.houseId && (
+              <HumidityControl deviceId={d.deviceId} houseId={d.houseId} name={(d.customName || d.deviceType.childType.name).trim()} />
+            )}
             {planFor === d.deviceId && (
               <TimerPlan
                 device={d}

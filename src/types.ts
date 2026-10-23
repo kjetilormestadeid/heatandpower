@@ -158,4 +158,155 @@ export interface TibberOverview {
     priceInfo: { current: TibberPrice | null; today: TibberPrice[]; tomorrow: TibberPrice[] };
   } | null;
   daily: { nodes: TibberConsumption[] };
+  /** siste 30 timer */
+  hourly: { nodes: TibberConsumption[] };
+}
+
+// --- Easee ---
+export interface EaseeCharger {
+  id: string;
+  name: string | null;
+  productCode: number | null;
+}
+export interface EaseeState {
+  /** 0 offline, 1 ikke tilkoblet, 2 venter på start, 3 lader, 4 ferdig, 5 feil, 6 klar, 7 venter på autorisering */
+  chargerOpMode: number;
+  /** kW */
+  totalPower: number;
+  /** kWh */
+  sessionEnergy: number;
+  outputCurrent: number | null;
+  dynamicChargerCurrent: number | null;
+  cableLocked: boolean | null;
+  isOnline: boolean;
+  latestPulse: string | null;
+}
+export interface EaseeChargerData {
+  state: EaseeState;
+  /** totalEnergy i kWh per time i dag */
+  hourly: { from: string; to: string; totalEnergy: number }[];
+}
+export type EaseeCommand = 'start' | 'stop' | 'pause' | 'resume';
+
+// --- Philips Hue ---
+export interface HueLight {
+  id: string;
+  name: string;
+  room: string | null;
+  on: boolean;
+  /** 0–100, null for lamper uten dimming */
+  brightness: number | null;
+}
+export interface HueGroup {
+  /** grouped_light-id */
+  id: string;
+  name: string;
+  kind: 'home' | 'room' | 'zone';
+  /** minst én lampe i gruppen er på */
+  on: boolean;
+  lights: number;
+  /** room-/zone-id for å endre navn (null for hele hjemmet) */
+  resourceId: string | null;
+  /** snitt-lysstyrke 0–100, null om gruppen ikke kan dimmes */
+  brightness: number | null;
+}
+export interface TibberLive {
+  timestamp: string;
+  /** W forbruk nå */
+  power: number;
+  /** kWh siden midnatt */
+  accumulatedConsumption: number;
+  /** kr siden midnatt */
+  accumulatedCost: number | null;
+  minPower: number;
+  averagePower: number;
+  maxPower: number;
+  currency: string | null;
+}
+
+// --- TP-Link Deco ---
+export interface DecoClient {
+  mac: string;
+  name: string;
+  ip: string | null;
+  /** phone, pc, tablet, iot_device, … (Deco sin gjetning) */
+  type: string | null;
+  wired: boolean;
+  /** Deco-enheten klienten er koblet til */
+  deco: string | null;
+  /** kB/s */
+  down: number;
+  up: number;
+  guest: boolean;
+  /** '2.4' | '5' | '6' | null (kablet/ukjent) */
+  band: string | null;
+}
+export interface Person {
+  name: string;
+  macs: string[];
+  home: boolean;
+  /** ISO – sist en av enhetene var på nettet */
+  lastSeen: string | null;
+}
+export interface DecoOverview {
+  clients: DecoClient[];
+  decos: { mac: string; name: string; online: boolean; model: string | null; firmware: string | null; role: string | null }[];
+  people: Person[];
+}
+
+// --- Automasjoner ---
+export interface HumidityRule {
+  deviceId: string;
+  houseId: string;
+  name: string;
+  enabled: boolean;
+  /** "HH:MM" – tidsrommet styringen får slå på enheten */
+  from: string;
+  to: string;
+  /** slå på ved fuktighet ≥ (%) */
+  onAbove: number;
+  /** slå av ved fuktighet ≤ (%) */
+  offBelow: number;
+  last?: { at: string; humidity: number | null; isOn: boolean | null; action: 'on' | 'off' | 'none'; reason: string; error?: string };
+}
+
+// --- Sonos ---
+export interface SonosGroup {
+  id: string;
+  name: string;
+  /** romnavn i gruppen */
+  players: string[];
+  state: 'playing' | 'paused' | 'idle' | 'buffering';
+  track: { title: string | null; artist: string | null; source: string | null; image: string | null } | null;
+  volume: number | null;
+  muted: boolean;
+}
+export interface SonosOverview {
+  householdId: string;
+  groups: SonosGroup[];
+  favorites: { id: string; name: string; image: string | null }[];
+}
+export type SonosCommand = 'play' | 'pause' | 'toggle' | 'next' | 'previous';
+
+// --- Feilsøking ---
+export interface MillDiag {
+  id: string;
+  name: string;
+  model: string;
+  type: string;
+  house: string;
+  room: string;
+  mac: string | null;
+  millConnected: boolean;
+  wifi: { ip: string | null; band: string | null; deco: string | null; guest: boolean } | null;
+  /** ok | cloud (på wifi, ikke i skyen) | nowifi | offline | unknown */
+  verdict: 'ok' | 'cloud' | 'nowifi' | 'offline' | 'unknown';
+  hint: string;
+}
+export interface MillNetworkDiagnostics {
+  checkedAt: string;
+  devices: MillDiag[];
+  candidates: { mac: string; name: string; ip: string | null; band: string | null; deco: string | null; reason: string }[];
+  deco: { clients: number; units: { mac: string; name: string; online: boolean; model: string | null; firmware: string | null; role: string | null }[] } | null;
+  decoError: string | null;
 }

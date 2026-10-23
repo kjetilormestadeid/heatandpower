@@ -7,6 +7,14 @@ import { EnergyChart } from './EnergyChart';
 import { DeviceList } from './DeviceList';
 import { ProgramsSection } from './ProgramsSection';
 import { TibberSection } from './TibberSection';
+import { ConsumptionCompare } from './ConsumptionCompare';
+import { ActiveNow } from './ActiveNow';
+import { EaseeSection } from './EaseeSection';
+import { HueSection } from './HueSection';
+import { EnergySum } from './EnergySum';
+import { PresenceSection } from './PresenceSection';
+import { SonosSection } from './SonosSection';
+import { DiagnosticsSection } from './DiagnosticsSection';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
 
@@ -92,6 +100,12 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
           </div>
         )}
 
+        <PresenceSection />
+
+        {houseId && rooms && rooms.length > 0 && <ActiveNow houseId={houseId} rooms={rooms} refreshKey={reloadKey} />}
+
+        {houseId && <EnergySum houseId={houseId} />}
+
         {houseId && !rooms && !error && <p className="muted">Henter rom…</p>}
         {rooms && rooms.length === 0 && <p className="muted">Ingen rom i dette huset.</p>}
         {rooms && (
@@ -126,7 +140,17 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
 
         <TibberSection />
 
+        {houseId && <ConsumptionCompare houseId={houseId} />}
+
+        <EaseeSection />
+
+        <HueSection />
+
+        <SonosSection />
+
         {houseId && <EnergyChart houseId={houseId} />}
+
+        <DiagnosticsSection />
       </main>
     </div>
   );

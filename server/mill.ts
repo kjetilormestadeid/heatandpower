@@ -179,3 +179,6 @@ export async function millRequest(sid: string, method: string, urlPath: string, 
   if (isGet && res.status === 200) st.cache.set(urlPath, { at: Date.now(), ...res });
   return res;
 }
+
+/** For bakgrunnsjobber (automasjoner): er økten fortsatt gyldig? */
+export const hasSession = (sid: string) => sessions.has(sid);
