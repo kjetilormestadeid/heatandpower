@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { Device, EaseeCharger, EaseeState, HueGroup, Room, TibberConsumption, TibberLive } from '../types';
+import type { Device, EaseeCharger, EaseeState, HueGroup, Room, SonosOverview, TibberConsumption, TibberLive } from '../types';
 import { MODE_LABEL, fmtTemp } from '../format';
 import { dayCost } from '../pricing';
 import { Icon } from './Icon';
@@ -37,6 +37,7 @@ export function QuickPanel({
       <div className="quick-grid">
         <QuickCharging />
         <QuickLights />
+        <QuickSonos />
         {rooms?.map((r) => (
           <HeatTile key={r.id} room={r} stale={roomsDown} onChanged={onRoomsChanged} />
         ))}
@@ -230,6 +231,109 @@ function QuickLights() {
         </button>
       )}
     </>
+  );
+}
+
+const SONOS_ROOM = 'Stue';
+const SONOS_FAV_KEY = 'sonos.quickFavorite';
+
+/** Start/stopp musikk i stua med valgt favoritt (NRK P2 som standard). Spiller bare på stue-høyttaleren. */
+function QuickSonos() {
+  const [busy, setBusy] = useState(false);
+  const [favId, setFavId] = useState(() => localStorage.getItem(SONOS_FAV_KEY) ?? '');
+  const [volume, setVolume] = useState<number | null>(null);
+  const volTimer = useRef<number | undefined>(undefined);
+  const { data, down, burst } = useServicePoll<SonosOverview>(
+    async () => ((await api.sonosStatus()).connected ? api.sonosOverview() : OFF),
+    30_000,
+    [],
+  );
+  const { expect, shown, pending } = useExpected<boolean>((id) => {
+    const g = data?.groups.find((x) => x.id === id);
+    return g && (g.state === 'playing' || g.state === 'buffering');
+  });
+
+  if (!data) return null;
+  const group = data.groups.find((g) => g.players.some((p) => p.toLowerCase() === SONOS_ROOM.toLowerCase()));
+  if (!group) return null;
+  const playerId = group.playerIds[group.players.findIndex((p) => p.toLowerCase() === SONOS_ROOM.toLowerCase())];
+  const fav =
+    data.favorites.find((f) => f.id === favId) ?? data.favorites.find((f) => /p2/i.test(f.name)) ?? data.favorites[0];
+  const playing = shown(group.id, group.state === 'playing' || group.state === 'buffering');
+
+  async function run(fn: () => Promise<unknown>, on: boolean) {
+    setBusy(true);
+    expect(group!.id, on);
+    // Feiler det, viser de tette hentingene riktig status – eller merker flisen som uten kontakt
+    await fn().catch(() => {});
+    setBusy(false);
+    burst();
+  }
+  const play = (id: string) => run(() => api.sonosPlayerFavorite(playerId, id), true);
+  // Lokal verdi mens trykkene samles opp; sendes 600 ms etter siste trykk
+  const shownVolume = volume ?? group.volume;
+  function adjustVolume(delta: number) {
+    if (shownVolume == null) return;
+    const next = Math.min(100, Math.max(0, Math.round((shownVolume + delta) / 5) * 5));
+    setVolume(next);
+    window.clearTimeout(volTimer.current);
+    volTimer.current = window.setTimeout(async () => {
+      await api.sonosVolume(group!.id, next).catch(() => {});
+      setVolume(null);
+      burst();
+    }, 600);
+  }
+
+  return (
+    <div className={`quick-tile quick-sonos ${playing ? 'on' : ''} ${pending(group.id) ? 'pending' : ''} ${down ? 'stale' : ''}`}>
+      {down && <Stale />}
+      <div className="quick-head">
+        <Icon name="music" />
+        <span className="quick-name">{SONOS_ROOM}</span>
+      </div>
+      <strong className="quick-value">
+        {pending(group.id) ? (playing ? 'Starter …' : 'Stopper …') : playing ? (group.track?.source ?? group.track?.title ?? 'Spiller') : 'Stille'}
+      </strong>
+      <span className="muted small">
+        {playing && group.track?.title && group.track.source ? group.track.title : 'Musikk'}
+        {shownVolume != null && ` · ${shownVolume} %`}
+      </span>
+      <div className="quick-sonos-ctl">
+        <button
+          aria-label={playing ? `Stopp musikken i ${SONOS_ROOM}` : `Spill ${fav?.name ?? ''} i ${SONOS_ROOM}`}
+          disabled={down || busy || (!playing && !fav)}
+          onClick={() => (playing ? run(() => api.sonosCommand(group.id, 'pause'), false) : fav && play(fav.id))}
+        >
+          <Icon name={playing ? 'pause' : 'play'} />
+        </button>
+        {data.favorites.length > 0 && (
+          <select
+            value={fav?.id ?? ''}
+            aria-label={`Favoritt i ${SONOS_ROOM}`}
+            disabled={down || busy}
+            onChange={(e) => {
+              setFavId(e.target.value);
+              localStorage.setItem(SONOS_FAV_KEY, e.target.value);
+              if (playing) play(e.target.value); // bytt kanal med en gang når det allerede spiller
+            }}
+          >
+            {data.favorites.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+      {shownVolume != null && (
+        <div className="quick-heat-btns">
+          <button aria-label={`Senk volumet i ${SONOS_ROOM}`} disabled={down || shownVolume <= 0} onClick={() => adjustVolume(-5)}>
+            <Icon name="minus" />
+          </button>
+          <button aria-label={`Øk volumet i ${SONOS_ROOM}`} disabled={down || shownVolume >= 100} onClick={() => adjustVolume(5)}>
+            <Icon name="plus" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

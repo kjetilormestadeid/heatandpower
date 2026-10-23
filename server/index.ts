@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { MillError, getSession, loadSessions, millRequest, signIn, signOut } from './mill.ts';
 import { TibberError, tibberConfigured, tibberHomes, tibberLive, tibberOverview } from './tibber.ts';
 import { HueError, hueAuthorizeUrl, hueCallback, hueConfigured, hueConnected, hueDisconnect, hueDimGroup, hueDimLight, hueGroups, hueIdentifyLight, hueLights, hueRenameGroup, hueRenameLight, hueSetGroup, hueSetLight } from './hue.ts';
-import { SonosError, isSonosCommand, parseRedirect, sonosAuthorizeUrl, sonosCommand, sonosComplete, sonosConfigured, sonosConnected, sonosDisconnect, sonosFavorite, sonosOverview, sonosPauseAll, sonosVolume } from './sonos.ts';
+import { SonosError, isSonosCommand, parseRedirect, sonosAuthorizeUrl, sonosCommand, sonosComplete, sonosConfigured, sonosConnected, sonosDisconnect, sonosFavorite, sonosOverview, sonosPauseAll, sonosPlayerFavorite, sonosVolume } from './sonos.ts';
 import { millNetworkDiagnostics } from './diagnostics.ts';
 import { humidityRules, saveHumidityRule, startAutomations } from './automation.ts';
 import { DecoError, decoConfigured, decoOverview, decoSetOwner } from './deco.ts';
@@ -399,6 +399,10 @@ app.post('/api/sonos/groups/:id/volume', requireSession, sonosRoute(async (req) 
 app.post('/api/sonos/groups/:id/favorite', requireSession, sonosRoute(async (req) => {
   if (typeof req.body?.favoriteId !== 'string') throw new SonosError(400, 'Forventet { favoriteId: string }');
   await sonosFavorite(String(req.params.id), req.body.favoriteId);
+}));
+app.post('/api/sonos/players/:id/favorite', requireSession, sonosRoute(async (req) => {
+  if (typeof req.body?.favoriteId !== 'string') throw new SonosError(400, 'Forventet { favoriteId: string }');
+  await sonosPlayerFavorite(String(req.params.id), req.body.favoriteId);
 }));
 app.post('/api/sonos/groups/:id/:command', requireSession, sonosRoute(async (req) => {
   const c = String(req.params.command);

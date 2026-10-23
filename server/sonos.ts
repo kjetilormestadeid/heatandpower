@@ -143,6 +143,7 @@ export interface SonosGroup {
   name: string;
   /** romnavn i gruppen */
   players: string[];
+  playerIds: string[];
   state: 'playing' | 'paused' | 'idle' | 'buffering';
   track: { title: string | null; artist: string | null; source: string | null; image: string | null } | null;
   volume: number | null;
@@ -184,6 +185,7 @@ export async function sonosOverview(): Promise<SonosOverview> {
         id: gr.id,
         name: gr.name,
         players: gr.playerIds.map((id) => playerName.get(id) ?? id),
+        playerIds: gr.playerIds,
         state: STATE[pb?.playbackState ?? ''] ?? 'idle',
         track: t?.name || meta?.container?.name ? { title: t?.name ?? null, artist: t?.artist?.name ?? null, source: meta?.container?.name ?? null, image: t?.imageUrl ?? null } : null,
         volume: vol?.volume ?? null,
@@ -219,6 +221,19 @@ export async function sonosVolume(groupId: string, volume: number) {
 export async function sonosFavorite(groupId: string, favoriteId: string) {
   await api('POST', `/groups/${encodeURIComponent(groupId)}/favorites`, { favoriteId, playOnCompletion: true, action: 'REPLACE' });
   cache = null;
+}
+
+/** Spill en favoritt på én høyttaler alene: er den gruppert med andre, tas den ut i en egen gruppe først. */
+export async function sonosPlayerFavorite(playerId: string, favoriteId: string) {
+  const o = await sonosOverview();
+  const group = o.groups.find((g) => g.playerIds.includes(playerId));
+  if (!group) throw new SonosError(404, 'Fant ikke høyttaleren');
+  let groupId = group.id;
+  if (group.playerIds.length > 1) {
+    const r = await api<{ group: { id: string } }>('POST', `/households/${o.householdId}/groups/createGroup`, { playerIds: [playerId] });
+    groupId = r.group.id;
+  }
+  await sonosFavorite(groupId, favoriteId);
 }
 
 /** Pause alle grupper som spiller. */

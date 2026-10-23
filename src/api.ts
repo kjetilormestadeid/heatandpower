@@ -137,6 +137,8 @@ export const api = {
   sonosVolume: (groupId: string, volume: number) => request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/volume`, { volume }),
   sonosFavorite: (groupId: string, favoriteId: string) =>
     request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/favorite`, { favoriteId }),
+  sonosPlayerFavorite: (playerId: string, favoriteId: string) =>
+    request('POST', `/api/sonos/players/${encodeURIComponent(playerId)}/favorite`, { favoriteId }),
 
   calendarStatus: () => request<{ configured: boolean }>('GET', '/api/calendar/status'),
   calendarEvents: (days: number, fresh = false) =>

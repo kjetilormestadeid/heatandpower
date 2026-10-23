@@ -276,6 +276,7 @@ export interface SonosGroup {
   name: string;
   /** romnavn i gruppen */
   players: string[];
+  playerIds: string[];
   state: 'playing' | 'paused' | 'idle' | 'buffering';
   track: { title: string | null; artist: string | null; source: string | null; image: string | null } | null;
   volume: number | null;
