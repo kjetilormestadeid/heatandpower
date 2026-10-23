@@ -17,7 +17,7 @@ import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { QuickPanel } from './QuickPanel';
 import { Clock } from './Clock';
-import { pollWithBackoff } from '../useServicePoll';
+import { BURST_MS, pollWithBackoff } from '../useServicePoll';
 import { CalendarDrawer, refreshCalendar } from './CalendarDrawer';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
@@ -63,6 +63,15 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
       return false;
     }
   }, [houseId]);
+
+  // Rett etter en endring i et rom: hent rommene tett en liten stund så ny status (varmer/ikke) kommer fort
+  const burstTimers = useRef<number[]>([]);
+  const burstRooms = useCallback(() => {
+    burstTimers.current.forEach((t) => window.clearTimeout(t));
+    let at = 0;
+    burstTimers.current = BURST_MS.map((ms) => window.setTimeout(loadRooms, (at += ms)));
+  }, [loadRooms]);
+  useEffect(() => () => burstTimers.current.forEach((t) => window.clearTimeout(t)), [houseId]);
 
   useEffect(() => {
     if (!houseId) return;
@@ -154,6 +163,7 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
             refreshKey={reloadKey}
             onRoomsChanged={() => {
               loadRooms();
+              burstRooms();
               setReloadKey((k) => k + 1);
             }}
           />

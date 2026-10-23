@@ -128,16 +128,22 @@ export async function hueDisconnect() {
 const READ_CACHE_MS = 15_000;
 const STRUCTURE_CACHE_MS = 10 * 60_000;
 const STRUCTURE = new Set(['room', 'zone', 'bridge_home']);
+// Rett etter av/på spør appen tett for å se ny status – da caches status bare kort
+const AFTER_WRITE_MS = 30_000;
+const AFTER_WRITE_CACHE_MS = 1_500;
+let lastWrite = 0;
 const readCache = new Map<string, { at: number; data: unknown }>();
 const readInflight = new Map<string, Promise<unknown>>();
 
 async function clip<T>(method: 'GET' | 'PUT', resource: string, body?: unknown, retried = false): Promise<T> {
   if (method === 'PUT') {
     readCache.clear();
+    lastWrite = Date.now();
     return clipRaw<T>(method, resource, body, retried);
   }
   const hit = readCache.get(resource);
-  if (hit && Date.now() - hit.at < (STRUCTURE.has(resource) ? STRUCTURE_CACHE_MS : READ_CACHE_MS)) return hit.data as T;
+  const ttl = STRUCTURE.has(resource) ? STRUCTURE_CACHE_MS : Date.now() - lastWrite < AFTER_WRITE_MS ? AFTER_WRITE_CACHE_MS : READ_CACHE_MS;
+  if (hit && Date.now() - hit.at < ttl) return hit.data as T;
   const pending = readInflight.get(resource);
   if (pending) return pending as Promise<T>;
   const p = clipRaw<T>(method, resource, body, retried)

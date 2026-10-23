@@ -6,6 +6,9 @@ const MILL_API_BASE = process.env.MILL_API_BASE ?? 'https://api.millnorwaycloud.
 const SESSION_FILE = path.resolve('data', 'sessions.json');
 // Mill tillater 2500 kall/time per konto. Leseresultater deles mellom alle skjermer/økter på samme konto.
 const READ_CACHE_MS = 50_000; // litt under appens 60 s-intervall, så alle skjermer deler samme henting
+// Rett etter en endring spør appen tett for å se ny status – da caches lesinger bare kort
+const AFTER_WRITE_MS = 30_000;
+const AFTER_WRITE_CACHE_MS = 1_500;
 
 export class MillError extends Error {
   constructor(
@@ -36,6 +39,7 @@ interface AccountCache {
   hits: Map<string, { at: number } & MillResponse>;
   /** Kall som pågår – like kall samtidig (flere rom, flere skjermer) venter på samme svar */
   inflight: Map<string, Promise<MillResponse>>;
+  lastWrite: number;
 }
 
 const sessions = new Map<string, Session>();
@@ -55,7 +59,7 @@ function accountCache(sid: string): AccountCache {
   const key = sessions.get(sid)?.login.trim().toLowerCase() ?? sid;
   let c = accounts.get(key);
   if (!c) {
-    c = { hits: new Map(), inflight: new Map() };
+    c = { hits: new Map(), inflight: new Map(), lastWrite: 0 };
     accounts.set(key, c);
   }
   return c;
@@ -184,12 +188,14 @@ export async function millRequest(sid: string, method: string, urlPath: string, 
   if (!read) {
     // Endringer: tøm cachen så neste lesing viser det nye
     cache.hits.clear();
+    cache.lastWrite = Date.now();
     return send(sid, method, urlPath, body, false);
   }
 
   const key = `${method} ${urlPath} ${body !== undefined ? JSON.stringify(body) : ''}`;
   const hit = cache.hits.get(key);
-  if (hit && Date.now() - hit.at < READ_CACHE_MS) return { status: hit.status, data: hit.data };
+  const ttl = Date.now() - cache.lastWrite < AFTER_WRITE_MS ? AFTER_WRITE_CACHE_MS : READ_CACHE_MS;
+  if (hit && Date.now() - hit.at < ttl) return { status: hit.status, data: hit.data };
   const pending = cache.inflight.get(key);
   if (pending) return pending;
 

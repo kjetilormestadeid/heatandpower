@@ -172,19 +172,21 @@ function QuickCharging() {
 /** Av/på-fliser per Hue-rom, pluss en flis som slår av alt. Vises bare når Hue er koblet til. */
 function QuickLights() {
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { data: groups, setData: setGroups, down, reload } = useServicePoll<HueGroup[]>(
+  const { data: groups, down, burst } = useServicePoll<HueGroup[]>(
     async () => ((await api.hueStatus()).connected ? (await api.hueGroups()).groups : OFF),
     60_000,
     [],
   );
+  const { expect, shown, pending } = useExpected<boolean>((id) => groups?.find((g) => g.id === id)?.on);
 
   async function toggle(g: HueGroup, on: boolean) {
     setBusyId(g.id);
-    setGroups((list) => list?.map((x) => (x.id === g.id || g.kind === 'home' ? { ...x, on } : x)) ?? null);
-    // Feiler det, henter reload riktig status – eller merker flisene som uten kontakt
+    // «Slå av alt» gjelder alle rommene
+    for (const x of g.kind === 'home' ? (groups ?? []).filter((x) => x.kind === 'room' && x.on) : [g]) expect(x.id, on);
+    // Feiler det, viser de tette hentingene riktig status – eller merker flisene som uten kontakt
     await api.hueSetGroup(g.id, on).catch(() => {});
-    reload();
     setBusyId(null);
+    burst();
   }
 
   if (!groups) return null;
@@ -193,27 +195,30 @@ function QuickLights() {
 
   return (
     <>
-      {roomGroups.map((g) => (
-        <button
-          key={g.id}
-          className={`quick-tile quick-light ${g.on ? 'on' : ''} ${down ? 'stale' : ''}`}
-          aria-pressed={g.on}
-          disabled={down || busyId === g.id}
-          onClick={() => toggle(g, !g.on)}
-        >
-          {down && <Stale />}
-          <span className="quick-head">
-            <Icon name="bulb" />
-            <span className="quick-name">{g.name}</span>
-          </span>
-          <strong className="quick-value">{g.on ? 'På' : 'Av'}</strong>
-          <span className="small">{g.on && g.brightness != null ? `${g.brightness} %` : 'Lys'}</span>
-        </button>
-      ))}
+      {roomGroups.map((g) => {
+        const on = shown(g.id, g.on);
+        return (
+          <button
+            key={g.id}
+            className={`quick-tile quick-light ${on ? 'on' : ''} ${pending(g.id) ? 'pending' : ''} ${down ? 'stale' : ''}`}
+            aria-pressed={on}
+            disabled={down || busyId === g.id}
+            onClick={() => toggle(g, !on)}
+          >
+            {down && <Stale />}
+            <span className="quick-head">
+              <Icon name="bulb" />
+              <span className="quick-name">{g.name}</span>
+            </span>
+            <strong className="quick-value">{on ? 'På' : 'Av'}</strong>
+            <span className="small">{pending(g.id) ? (on ? 'Slår på …' : 'Slår av …') : on && g.brightness != null ? `${g.brightness} %` : 'Lys'}</span>
+          </button>
+        );
+      })}
       {home && (
         <button
           className={`quick-tile quick-all ${down ? 'stale' : ''}`}
-          disabled={down || busyId === home.id || !roomGroups.some((g) => g.on)}
+          disabled={down || busyId === home.id || !roomGroups.some((g) => shown(g.id, g.on))}
           onClick={() => toggle(home, false)}
         >
           {down && <Stale />}
@@ -231,19 +236,20 @@ function QuickLights() {
 /** Mill-enheter uten rom (f.eks. stikkontakter): trykk slår av/på, med effekt, temperatur og fukt. */
 function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: unknown }) {
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { data: devices, setData: setDevices, down, reload } = useServicePoll<Device[]>(
+  const { data: devices, down, burst } = useServicePoll<Device[]>(
     async () => (await api.independentDevices(houseId)).items,
     60_000, // Mill: maks 2500 kall/time
     [houseId, refreshKey],
   );
+  const { expect, shown, pending } = useExpected<boolean | null>((id) => devices?.find((d) => d.deviceId === id)?.isEnabled);
 
-  async function toggle(d: Device) {
+  async function toggle(d: Device, enabled: boolean) {
     setBusyId(d.deviceId);
-    setDevices((list) => list?.map((x) => (x.deviceId === d.deviceId ? { ...x, isEnabled: !d.isEnabled } : x)) ?? null);
-    // Feiler det, henter reload riktig status – eller merker flisene som uten kontakt
-    await api.setDeviceEnabled(d.deviceId, !d.isEnabled).catch(() => {});
-    reload();
+    expect(d.deviceId, enabled);
+    // Feiler det, viser de tette hentingene riktig status – eller merker flisene som uten kontakt
+    await api.setDeviceEnabled(d.deviceId, enabled).catch(() => {});
     setBusyId(null);
+    burst();
   }
 
   if (!devices) return null;
@@ -252,16 +258,17 @@ function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: u
     <>
       {devices.map((d) => {
         const m = d.lastMetrics;
-        const on = d.isConnected && d.isEnabled === true;
+        const enabled = shown(d.deviceId, d.isEnabled);
+        const on = d.isConnected && enabled === true;
         const power = Math.round(m?.currentPower ?? 0);
         const canToggle = d.isEnabled != null && d.isConnected;
         return (
           <button
             key={d.deviceId}
-            className={`quick-tile quick-device ${on ? 'on' : ''} ${d.isConnected ? '' : 'offline'} ${down ? 'stale' : ''}`}
-            aria-pressed={d.isEnabled ?? undefined}
+            className={`quick-tile quick-device ${on ? 'on' : ''} ${pending(d.deviceId) ? 'pending' : ''} ${d.isConnected ? '' : 'offline'} ${down ? 'stale' : ''}`}
+            aria-pressed={enabled ?? undefined}
             disabled={down || !canToggle || busyId === d.deviceId}
-            onClick={() => toggle(d)}
+            onClick={() => toggle(d, !enabled)}
           >
             {down && <Stale />}
             <span className="quick-head">
@@ -269,7 +276,7 @@ function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: u
               <span className="quick-name">{d.customName?.trim() || d.deviceType.childType.name}</span>
             </span>
             <strong className="quick-value">
-              {!d.isConnected ? 'Frakoblet' : d.isEnabled == null ? `${power} W` : on ? 'På' : 'Av'}
+              {!d.isConnected ? 'Frakoblet' : enabled == null ? `${power} W` : on ? 'På' : 'Av'}
               {on && power > 0 && <span className="muted small">{power} W</span>}
             </strong>
             <span className="muted small">
@@ -282,6 +289,33 @@ function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: u
       })}
     </>
   );
+}
+
+/**
+ * Ønsket tilstand etter et trykk, holdt til hentet status bekrefter den (eller 20 s har gått).
+ * Uten dette ville flisen blaffe tilbake når en tett henting kommer før enheten har byttet.
+ */
+function useExpected<T>(actual: (id: string) => T | undefined) {
+  const [expected, setExpected] = useState<Record<string, { value: T; until: number }>>({});
+  const now = Date.now();
+  const live = Object.fromEntries(
+    Object.entries(expected).filter(([id, e]) => e.until > now && actual(id) !== e.value),
+  ) as typeof expected;
+  // Rydd bort bekreftede/utløpte i neste runde
+  useEffect(() => {
+    if (Object.keys(live).length !== Object.keys(expected).length) setExpected(live);
+  });
+  useEffect(() => {
+    if (!Object.keys(live).length) return;
+    const t = setTimeout(() => setExpected((e) => ({ ...e })), 20_000);
+    return () => clearTimeout(t);
+  }, [expected]);
+  return {
+    expect: (id: string, value: T) => setExpected((e) => ({ ...e, [id]: { value, until: Date.now() + 20_000 } })),
+    /** viste verdi: ønsket mens den venter på bekreftelse, ellers faktisk */
+    shown: (id: string, fallback: T) => (id in live ? live[id].value : fallback),
+    pending: (id: string) => id in live,
+  };
 }
 
 /** Liten, rolig merkelapp på fliser der tjenesten ikke svarer (verdiene er sist kjente). */
@@ -324,7 +358,7 @@ function HeatTile({ room, stale, onChanged }: { room: Room; stale: boolean; onCh
         setError(true);
       } finally {
         pending.current = false;
-        onChanged();
+        onChanged(); // Dashboard henter rommene tett en stund, så «varmer» kommer fort
       }
     }, 800);
   }

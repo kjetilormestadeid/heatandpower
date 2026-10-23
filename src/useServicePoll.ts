@@ -6,6 +6,9 @@ export const OFF = Symbol('off');
 // Nede: prøv igjen etter 15 s, så 30 s, 60 s, 120 s, 240 s – deretter hvert 5. minutt til den svarer
 const RETRY_FIRST_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
+/** Pauser mellom hentingene rett etter en endring (2 s, så 5, 10 og 20 s etter), før vanlig intervall. */
+export const BURST_MS = [2_000, 3_000, 5_000, 10_000];
+
 export const retryDelay = (failures: number) => Math.min(RETRY_FIRST_MS * 2 ** (failures - 1), RETRY_MAX_MS);
 
 /**
@@ -44,6 +47,7 @@ export function useServicePoll<T>(fetcher: (prev: T | null) => Promise<T | typeo
   const [data, setData] = useState<T | null>(null);
   const [down, setDown] = useState(false);
   const [kick, setKick] = useState(0);
+  const burstRef = useRef<() => void>(() => {});
   const fetchRef = useRef(fetcher);
   fetchRef.current = fetcher;
   const dataRef = useRef<T | null>(null);
@@ -53,7 +57,15 @@ export function useServicePoll<T>(fetcher: (prev: T | null) => Promise<T | typeo
     let stop = false;
     let t: number | undefined;
     let failures = 0;
-    const schedule = (ms: number) => (t = window.setTimeout(run, ms));
+    let burst: number[] = [];
+    const schedule = (ms: number) => {
+      window.clearTimeout(t);
+      t = window.setTimeout(run, burst.length ? burst.shift()! : ms);
+    };
+    burstRef.current = () => {
+      burst = [...BURST_MS];
+      schedule(0);
+    };
     async function run() {
       if (document.visibilityState !== 'visible') return void schedule(failures ? retryDelay(failures) : everyMs);
       try {
@@ -80,5 +92,7 @@ export function useServicePoll<T>(fetcher: (prev: T | null) => Promise<T | typeo
   }, [everyMs, kick, ...deps]);
 
   const reload = useCallback(() => setKick((k) => k + 1), []);
-  return { data, setData, down, reload };
+  /** Hent tett en liten stund (etter at noe er slått av/på), så ny status kommer fort inn. */
+  const burst = useCallback(() => burstRef.current(), []);
+  return { data, setData, down, reload, burst };
 }

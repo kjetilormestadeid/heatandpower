@@ -541,3 +541,16 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .quick-energy.stale { position: relative; padding-top: 24px; }
 .quick-energy.stale .quick-stale { top: 0; left: 0; right: auto; }
 .quick-tile.stale .quick-head, .cal-ticker.stale .cal-ticker-item { padding-right: 100px; } /* plass til merkelappen, navnet kuttes med … */
+
+/* --- myke overganger når fliser slås av/på eller begynner/slutter å varme --- */
+.quick-tile, .quick-tile .quick-head, .quick-tile .quick-name, .quick-tile .quick-value {
+  transition: background-color 1.5s ease, border-color 1.5s ease, color 1.5s ease, filter 0.8s ease, opacity 0.8s ease;
+}
+.quick-tile::after { transition: opacity 1.5s ease; }
+/* Venter på bekreftelse: ny farge glir inn, ikonet blinker rolig */
+.quick-tile.pending .quick-head .icon-svg { animation: tile-wait 1.2s ease-in-out infinite !important; }
+@keyframes tile-wait { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .quick-tile, .quick-tile .quick-head, .quick-tile .quick-name, .quick-tile .quick-value, .quick-tile::after { transition: none; }
+  .quick-tile.pending .quick-head .icon-svg { animation: none !important; }
+}
