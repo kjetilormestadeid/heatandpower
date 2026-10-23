@@ -310,3 +310,16 @@ export interface MillNetworkDiagnostics {
   deco: { clients: number; units: { mac: string; name: string; online: boolean; model: string | null; firmware: string | null; role: string | null }[] } | null;
   decoError: string | null;
 }
+
+// --- Kalender (ICS) ---
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  /** ISO-tidspunkt, eller YYYY-MM-DD for heldagshendelser */
+  start: string;
+  /** Eksklusiv slutt: ISO-tidspunkt, eller YYYY-MM-DD (dagen etter siste dag) for heldagshendelser */
+  end: string;
+  allDay: boolean;
+  location: string | null;
+  calendar: string | null;
+}

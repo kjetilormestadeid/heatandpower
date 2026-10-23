@@ -7,23 +7,18 @@ import { easeeMode } from './EaseeSection';
 
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
 
-/** Hurtigpanel øverst for nettbrett: totalforbruk, lys av/på per rom og varme opp/ned per rom. */
+/** Hurtigpanel øverst for nettbrett: totalforbruk, og så elbil, lys og varme som én strøm av fliser. */
 export function QuickPanel({ rooms, onRoomsChanged }: { rooms: Room[] | null; onRoomsChanged: () => void }) {
   return (
     <section className="card quick">
       <QuickEnergy rooms={rooms} />
-      <QuickCharging />
-      <QuickLights />
-      {rooms && rooms.length > 0 && (
-        <div className="quick-block">
-          <h2>Varme</h2>
-          <div className="quick-grid heat">
-            {rooms.map((r) => (
-              <HeatTile key={r.id} room={r} onChanged={onRoomsChanged} />
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="quick-grid">
+        <QuickCharging />
+        <QuickLights />
+        {rooms?.map((r) => (
+          <HeatTile key={r.id} room={r} onChanged={onRoomsChanged} />
+        ))}
+      </div>
     </section>
   );
 }
@@ -107,32 +102,25 @@ function QuickCharging() {
   if (!chargers?.length) return null;
   const num = (v: number) => v.toLocaleString('nb-NO', { maximumFractionDigits: 1 });
 
-  return (
-    <div className="quick-block">
-      <h2>Elbil</h2>
-      <div className="quick-grid heat">
-        {chargers.map(({ charger, state }) => {
-          const charging = state?.chargerOpMode === 3;
-          return (
-            <div key={charger.id} className={`quick-ev ${charging ? 'charging' : ''}`}>
-              <div className="quick-heat-head">
-                <span className="quick-name">{charger.name || 'Elbillader'}</span>
-                {charging && <Icon name="bolt" />}
-              </div>
-              <strong>{state ? (charging ? `${num(state.totalPower)} kW` : easeeMode(state.chargerOpMode).label) : 'Utilgjengelig'}</strong>
-              <span className="muted small">
-                {charging ? 'Lader nå' : 'Lader ikke'}
-                {state && state.sessionEnergy > 0 ? ` · ${num(state.sessionEnergy)} kWh denne økten` : ''}
-              </span>
-            </div>
-          );
-        })}
+  return chargers.map(({ charger, state }) => {
+    const charging = state?.chargerOpMode === 3;
+    return (
+      <div key={charger.id} className={`quick-tile quick-ev ${charging ? 'charging' : ''}`}>
+        <div className="quick-head">
+          <Icon name="bolt" />
+          <span className="quick-name">{charger.name || 'Elbil'}</span>
+        </div>
+        <strong className="quick-value">{state ? (charging ? `${num(state.totalPower)} kW` : easeeMode(state.chargerOpMode).label) : 'Utilgjengelig'}</strong>
+        <span className="muted small">
+          {charging ? 'Lader nå' : 'Lader ikke'}
+          {state && state.sessionEnergy > 0 ? ` · ${num(state.sessionEnergy)} kWh` : ''}
+        </span>
       </div>
-    </div>
-  );
+    );
+  });
 }
 
-/** Store av/på-knapper per Hue-rom. Vises bare når Hue er koblet til. */
+/** Av/på-fliser per Hue-rom, pluss en flis som slår av alt. Vises bare når Hue er koblet til. */
 function QuickLights() {
   const [groups, setGroups] = useState<HueGroup[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -168,37 +156,42 @@ function QuickLights() {
   const roomGroups = groups.filter((g) => g.kind === 'room');
 
   return (
-    <div className="quick-block">
-      <div className="section-head">
-        <h2>Lys</h2>
-        <div className="spacer" />
-        {home && (
-          <button className="quick-all" disabled={busyId === home.id || !roomGroups.some((g) => g.on)} onClick={() => toggle(home, false)}>
-            Slå av alt
-          </button>
-        )}
-      </div>
-      {error && <p className="error small">{error}</p>}
-      <div className="quick-grid">
-        {roomGroups.map((g) => (
-          <button
-            key={g.id}
-            className={`quick-light ${g.on ? 'on' : ''}`}
-            aria-pressed={g.on}
-            disabled={busyId === g.id}
-            onClick={() => toggle(g, !g.on)}
-          >
+    <>
+      {error && <p className="error small quick-error">{error}</p>}
+      {roomGroups.map((g) => (
+        <button
+          key={g.id}
+          className={`quick-tile quick-light ${g.on ? 'on' : ''}`}
+          aria-pressed={g.on}
+          disabled={busyId === g.id}
+          onClick={() => toggle(g, !g.on)}
+        >
+          <span className="quick-head">
             <Icon name="bulb" />
             <span className="quick-name">{g.name}</span>
-            <span className="small">{g.on ? (g.brightness != null ? `På · ${g.brightness} %` : 'På') : 'Av'}</span>
-          </button>
-        ))}
-      </div>
-    </div>
+          </span>
+          <strong className="quick-value">{g.on ? 'På' : 'Av'}</strong>
+          <span className="small">{g.on && g.brightness != null ? `${g.brightness} %` : 'Lys'}</span>
+        </button>
+      ))}
+      {home && (
+        <button
+          className="quick-tile quick-all"
+          disabled={busyId === home.id || !roomGroups.some((g) => g.on)}
+          onClick={() => toggle(home, false)}
+        >
+          <span className="quick-head">
+            <Icon name="bulb" />
+            <span className="quick-name">Alt lys</span>
+          </span>
+          <strong className="quick-value">Slå av</strong>
+        </button>
+      )}
+    </>
   );
 }
 
-/** Rommets temperatur nå og settpunktet for modusen som gjelder akkurat nå, med store −/+ knapper. */
+/** Rommets temperatur og luftfuktighet nå, og settpunktet for modusen som gjelder akkurat nå, med −/+ knapper. */
 function HeatTile({ room, onChanged }: { room: Room; onChanged: () => void }) {
   const effective = room.mode === 'weekly_program' ? room.activeModeFromWeeklyProgram : room.mode;
   const key: TempKey = effective === 'sleep' ? 'roomSleepTemperature' : effective === 'away' ? 'roomAwayTemperature' : 'roomComfortTemperature';
@@ -235,18 +228,23 @@ function HeatTile({ room, onChanged }: { room: Room; onChanged: () => void }) {
   }
 
   return (
-    <div className={`quick-heat ${room.roomHeatStatus ? 'heating' : ''} ${room.isRoomOnline ? '' : 'offline'}`}>
-      <div className="quick-heat-head">
+    <div className={`quick-tile quick-heat ${room.roomHeatStatus ? 'heating' : ''} ${room.isRoomOnline ? '' : 'offline'}`}>
+      <div className="quick-head">
+        <Icon name={room.roomHeatStatus ? 'flame' : 'thermometer'} />
         <span className="quick-name">{room.name}</span>
-        {room.roomHeatStatus && <Icon name="flame" />}
       </div>
-      <div className="quick-heat-now">
-        <strong>{fmtTemp(room.averageTemperature)}</strong>
-        <span className="muted small">
-          {MODE_LABEL[effective ?? 'weekly_program']}
-          {target != null && effective !== 'off' ? ` · mål ${fmtTemp(target)}` : ''}
-        </span>
-      </div>
+      <strong className="quick-value">
+        {fmtTemp(room.averageTemperature)}
+        {room.roomHumidity != null && (
+          <span className="quick-humidity muted small" title="Luftfuktighet">
+            <Icon name="droplet" /> {Math.round(room.roomHumidity)} %
+          </span>
+        )}
+      </strong>
+      <span className="muted small">
+        {MODE_LABEL[effective ?? 'weekly_program']}
+        {target != null && effective !== 'off' ? ` · mål ${fmtTemp(target)}` : ''}
+      </span>
       <div className="quick-heat-btns">
         <button aria-label={`Senk temperaturen i ${room.name}`} disabled={!canChange} onClick={() => adjust(-0.5)}>
           <Icon name="minus" />

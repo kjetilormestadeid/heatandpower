@@ -10,6 +10,7 @@ import { millNetworkDiagnostics } from './diagnostics.ts';
 import { humidityRules, saveHumidityRule, startAutomations } from './automation.ts';
 import { DecoError, decoConfigured, decoOverview, decoSetOwner } from './deco.ts';
 import { EaseeError, easeeCharger, easeeChargers, easeeCommand, easeeConfigured, isEaseeCommand } from './easee.ts';
+import { CalendarError, calendarConfigured, calendarEvents } from './calendar.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const COOKIE = 'mill_sid';
@@ -135,6 +136,25 @@ app.get('/api/tibber/homes/:homeId', requireSession, async (req, res) => {
     res.json(await tibberOverview(String(req.params.homeId), resolution));
   } catch (err) {
     sendTibberError(res, err);
+  }
+});
+
+// Kalender: ICS-abonnement fra .env. Sender hendelser fra midnatt i dag og `days` dager frem.
+app.get('/api/calendar/status', requireSession, (_req, res) => {
+  res.json({ configured: calendarConfigured() });
+});
+
+app.get('/api/calendar/events', requireSession, async (req, res) => {
+  const days = Math.min(31, Math.max(1, Number(req.query.days) || 7));
+  const from = new Date();
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(to.getDate() + days);
+  try {
+    res.json({ events: await calendarEvents(from, to) });
+  } catch (err) {
+    if (err instanceof CalendarError) res.status(err.status).json({ error: { message: err.message } });
+    else sendError(res, err);
   }
 });
 

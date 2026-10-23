@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { House, Room, RoomProgram } from '../types';
 import { MODE_LABEL } from '../format';
@@ -17,8 +17,10 @@ import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { QuickPanel } from './QuickPanel';
 import { Clock } from './Clock';
+import { CalendarDrawer } from './CalendarDrawer';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
+const IDLE_MS = 90_000; // tilbake til hurtigpanelet etter så lang tid uten berøring
 
 export function Dashboard({ user, onLogout }: { user: string; onLogout: () => void }) {
   const [houses, setHouses] = useState<House[] | null>(null);
@@ -65,6 +67,36 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
   }, [houseId, loadRooms]);
 
   const house = houses?.find((h) => h.id === houseId);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Nettbrett: gå tilbake til start (hurtigpanelet) når ingen har rørt skjermen en stund
+  useEffect(() => {
+    const main = mainRef.current;
+    let t: number | undefined;
+    // Så lenge ingen har rørt skjermen holdes visningen på hurtigpanelet. Ellers kan scroll-snap
+    // hoppe til et annet kort når seksjoner lastes inn og bytter størrelse.
+    let atHome = true;
+    const goHome = () => {
+      atHome = true;
+      main?.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+      main?.querySelectorAll<HTMLElement>(':scope > *').forEach((el) => el.scrollTo({ top: 0, behavior: 'smooth' }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+    const onActivity = () => {
+      atHome = false;
+      window.clearTimeout(t);
+      t = window.setTimeout(goHome, IDLE_MS);
+    };
+    const pin = new MutationObserver(() => atHome && main && main.scrollLeft !== 0 && (main.scrollLeft = 0));
+    if (main) pin.observe(main, { childList: true, subtree: true, characterData: true });
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchmove'] as const;
+    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
+    return () => {
+      window.clearTimeout(t);
+      pin.disconnect();
+      events.forEach((e) => window.removeEventListener(e, onActivity));
+    };
+  }, []);
 
   return (
     <div className="layout">
@@ -89,6 +121,7 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
             Oppdatert {updatedAt.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}
           </span>
         )}
+        <CalendarDrawer />
         {house && (
           <button onClick={loadRooms} aria-label="Oppdater" title="Oppdater">
             Oppdater
@@ -97,7 +130,7 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
         <button onClick={onLogout} title={user}>Logg ut</button>
       </header>
 
-      <main>
+      <main ref={mainRef}>
         {error && <p className="error banner">{error}</p>}
         {houses && houses.length === 0 && <p className="muted">Ingen hus funnet på denne kontoen.</p>}
 

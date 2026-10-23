@@ -22,6 +22,7 @@ import type {
   SonosCommand,
   SonosOverview,
   MillNetworkDiagnostics,
+  CalendarEvent,
 } from './types';
 
 export class ApiError extends Error {
@@ -136,6 +137,9 @@ export const api = {
   sonosVolume: (groupId: string, volume: number) => request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/volume`, { volume }),
   sonosFavorite: (groupId: string, favoriteId: string) =>
     request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/favorite`, { favoriteId }),
+
+  calendarStatus: () => request<{ configured: boolean }>('GET', '/api/calendar/status'),
+  calendarEvents: (days: number) => request<{ events: CalendarEvent[] }>('GET', `/api/calendar/events?days=${days}`),
 
   millNetworkDiagnostics: () => request<MillNetworkDiagnostics>('GET', '/api/diagnostics/mill-network'),
 
