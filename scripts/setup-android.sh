@@ -44,10 +44,16 @@ die() {
 command -v pkg >/dev/null 2>&1 || die "$E_ENV" "Fant ikke «pkg». Kjør skriptet i Termux."
 
 # 2. Pakker
+# Full oppgradering først: Termux støtter ikke delvise oppgraderinger, og ny
+# nodejs mot gammel libc++ gir «CANNOT LINK EXECUTABLE node».
+info "Oppgraderer Termux-pakker (pkg upgrade) …"
+pkg upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+  || die "$E_PKG" "pkg upgrade feilet. Prøv «termux-change-repo», og kjør skriptet på nytt."
+
 info "Installerer pakker (git, Node.js) …"
 pkgs="git"
 if command -v node >/dev/null 2>&1; then
-  info "Node er allerede installert ($(node --version)), hopper over Node-pakken."
+  info "Node er allerede installert, hopper over Node-pakken."
 else
   # nodejs-lts og nodejs er i konflikt, så vi installerer bare når node mangler
   pkgs="$pkgs nodejs-lts"
@@ -55,6 +61,8 @@ fi
 # shellcheck disable=SC2086
 pkg install -y $pkgs || die "$E_PKG" "pkg install feilet. Prøv «pkg update» og «termux-change-repo», og kjør skriptet på nytt."
 command -v node >/dev/null 2>&1 || die "$E_PKG" "node finnes ikke etter installasjon."
+node --version >/dev/null 2>&1 \
+  || die "$E_PKG" "node er installert, men starter ikke (se feilen over). Kjør «pkg upgrade», og kjør skriptet på nytt."
 command -v npm >/dev/null 2>&1 || die "$E_PKG" "npm finnes ikke etter installasjon."
 command -v git >/dev/null 2>&1 || die "$E_PKG" "git finnes ikke etter installasjon."
 
