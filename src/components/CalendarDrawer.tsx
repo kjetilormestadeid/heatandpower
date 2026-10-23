@@ -269,7 +269,7 @@ function EventRow({ event, day, now, color }: { event: CalendarEvent; day: Date;
 
 /** Stripe ved siden av forbruket: dagens gjenstående avtaler (så morgendagens) glir inn én om gangen. Trykk åpner panelet. */
 export function CalendarTicker() {
-  const { configured, events } = useCalendar();
+  const { configured, events, error } = useCalendar();
   const now = useNow();
   const [idx, setIdx] = useState(0);
   const [leaving, setLeaving] = useState(false);
@@ -309,7 +309,8 @@ export function CalendarTicker() {
   const item = count ? items[idx % count] : null;
 
   return (
-    <button className="cal-ticker" onClick={openCalendar} aria-label="Åpne kalenderen">
+    <button className={`cal-ticker ${error ? 'stale' : ''}`} onClick={openCalendar} aria-label="Åpne kalenderen">
+      {error && <span className="quick-stale" title={error}>Ingen kontakt</span>}
       {item ? (
         <span
           key={`${item.e.id}-${idx}`}

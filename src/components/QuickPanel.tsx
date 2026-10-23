@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Device, EaseeCharger, EaseeState, HueGroup, Room, TibberConsumption, TibberLive } from '../types';
 import { MODE_LABEL, fmtTemp } from '../format';
@@ -6,6 +6,7 @@ import { dayCost } from '../pricing';
 import { Icon } from './Icon';
 import { easeeMode } from './EaseeSection';
 import { CalendarTicker } from './CalendarDrawer';
+import { OFF, useServicePoll } from '../useServicePoll';
 
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
 
@@ -15,10 +16,13 @@ export function QuickPanel({
   rooms,
   independentCount,
   refreshKey,
+  roomsDown = false,
   onRoomsChanged,
 }: {
   houseId: string;
   rooms: Room[] | null;
+  /** siste henting av rom feilet – varmeflisene viser sist kjente verdier */
+  roomsDown?: boolean;
   /** antall enheter uten rom – de hentes bare når det finnes noen */
   independentCount: number;
   refreshKey?: unknown;
@@ -34,7 +38,7 @@ export function QuickPanel({
         <QuickCharging />
         <QuickLights />
         {rooms?.map((r) => (
-          <HeatTile key={r.id} room={r} onChanged={onRoomsChanged} />
+          <HeatTile key={r.id} room={r} stale={roomsDown} onChanged={onRoomsChanged} />
         ))}
         {independentCount > 0 && <QuickDevices houseId={houseId} refreshKey={refreshKey} />}
       </div>
@@ -45,53 +49,38 @@ export function QuickPanel({
 /** Tibber Pulse gir effekt nå og forbruk siden midnatt; uten Tibber vises Mill-ovnenes sum i dag.
  *  Kostnaden regnes selv med Norgespris + Elvia-nettleie (se pricing.ts), ikke Tibbers spotpris. */
 function QuickEnergy({ rooms }: { rooms: Room[] | null }) {
-  const [live, setLive] = useState<TibberLive | null>(null);
-  const [hourly, setHourly] = useState<TibberConsumption[]>([]);
-
+  // Pulse: uten fersk måling regnes Tibber som nede, og siste måling vises dempet
+  const { data: live, down } = useServicePoll<TibberLive>(
+    async () => {
+      if (!(await api.tibberStatus()).configured) return OFF;
+      const r = await api.tibberLive();
+      if (!r.live) throw new Error(r.error ?? 'Ingen måling fra Tibber Pulse');
+      return r.live;
+    },
+    10_000,
+    [],
+  );
   // Timeforbruket fordeler dagens kWh på dag-/nattpris i nettleien
-  useEffect(() => {
-    let stop = false;
-    const load = () =>
-      api.tibberStatus()
-        .then(async (s) => {
-          if (!s.configured) return;
-          const { homes } = await api.tibberHomes();
-          const saved = localStorage.getItem('tibber.homeId');
-          const id = homes.some((h) => h.id === saved) ? saved! : homes[0]?.id;
-          if (!id) return;
-          const o = await api.tibberOverview(id, 'HOURLY');
-          if (!stop) setHourly(o.hourly?.nodes ?? []);
-        })
-        .catch(() => {});
-    load();
-    const t = setInterval(() => document.visibilityState === 'visible' && load(), 5 * 60_000);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, []);
-
-  useEffect(() => {
-    let stop = false;
-    const poll = () =>
-      document.visibilityState === 'visible' &&
-      api.tibberStatus()
-        .then((s) => (s.configured ? api.tibberLive() : { live: null, error: null }))
-        .then((r) => !stop && setLive(r.live), () => {});
-    poll();
-    const t = setInterval(poll, 10_000);
-    return () => {
-      stop = true;
-      clearInterval(t);
-    };
-  }, []);
+  const { data: hourly } = useServicePoll<TibberConsumption[]>(
+    async () => {
+      if (!(await api.tibberStatus()).configured) return OFF;
+      const { homes } = await api.tibberHomes();
+      const saved = localStorage.getItem('tibber.homeId');
+      const id = homes.some((h) => h.id === saved) ? saved! : homes[0]?.id;
+      if (!id) return OFF;
+      return (await api.tibberOverview(id, 'HOURLY')).hourly?.nodes ?? [];
+    },
+    5 * 60_000,
+    [],
+  );
 
   const millWh = rooms?.reduce((s, r) => s + r.roomEnergyUsage, 0) ?? 0;
   const num = (v: number, digits: number) => v.toLocaleString('nb-NO', { maximumFractionDigits: digits });
-  const cost = live ? costToday(live, hourly) : null;
+  const cost = live ? costToday(live, hourly ?? []) : null;
 
   return (
-    <div className="quick-energy">
+    <div className={`quick-energy ${live && down ? 'stale' : ''}`}>
+      {live && down && <Stale />}
       {live ? (
         <>
           <div className="quick-stat">
@@ -139,39 +128,38 @@ function costToday(live: TibberLive, hourly: TibberConsumption[]) {
 
 /** Om elbilene lader nå: status, effekt og energi i økten per Easee-lader. Vises bare når Easee er satt opp. */
 function QuickCharging() {
-  const [chargers, setChargers] = useState<{ charger: EaseeCharger; state: EaseeState | null }[] | null>(null);
-
-  useEffect(() => {
-    let stop = false;
-    let t: number | undefined;
-    api.easeeStatus().then(async (s) => {
-      if (!s.configured) return;
+  const { data: chargers, down } = useServicePoll<{ charger: EaseeCharger; state: EaseeState | null; stale: boolean }[]>(
+    async (prev) => {
+      if (!(await api.easeeStatus()).configured) return OFF;
       const { chargers: list } = await api.easeeChargers();
-      const load = () =>
-        Promise.all(
-          list.map((c) => api.easeeCharger(c.id).then((d) => ({ charger: c, state: d.state }), () => ({ charger: c, state: null }))),
-        ).then((r) => !stop && setChargers(r));
-      load();
-      t = window.setInterval(() => document.visibilityState === 'visible' && load(), 30_000);
-    }).catch(() => {});
-    return () => {
-      stop = true;
-      window.clearInterval(t);
-    };
-  }, []);
+      // En lader som ikke svarer beholder forrige status, merket som utdatert
+      return Promise.all(
+        list.map((c) =>
+          api.easeeCharger(c.id).then(
+            (d) => ({ charger: c, state: d.state, stale: false }),
+            () => ({ charger: c, state: prev?.find((p) => p.charger.id === c.id)?.state ?? null, stale: true }),
+          ),
+        ),
+      );
+    },
+    30_000,
+    [],
+  );
 
   if (!chargers?.length) return null;
   const num = (v: number) => v.toLocaleString('nb-NO', { maximumFractionDigits: 1 });
 
-  return chargers.map(({ charger, state }) => {
+  return chargers.map(({ charger, state, stale }) => {
     const charging = state?.chargerOpMode === 3;
+    const isStale = down || stale;
     return (
-      <div key={charger.id} className={`quick-tile quick-ev ${charging ? 'charging' : ''}`}>
+      <div key={charger.id} className={`quick-tile quick-ev ${charging ? 'charging' : ''} ${isStale ? 'stale' : ''}`}>
+        {isStale && <Stale />}
         <div className="quick-head">
           <Icon name="bolt" />
           <span className="quick-name">{charger.name || 'Elbil'}</span>
         </div>
-        <strong className="quick-value">{state ? (charging ? `${num(state.totalPower)} kW` : easeeMode(state.chargerOpMode).label) : 'Utilgjengelig'}</strong>
+        <strong className="quick-value">{state ? (charging ? `${num(state.totalPower)} kW` : easeeMode(state.chargerOpMode).label) : '–'}</strong>
         <span className="muted small">
           {charging ? 'Lader nå' : 'Lader ikke'}
           {state && state.sessionEnergy > 0 ? ` · ${num(state.sessionEnergy)} kWh` : ''}
@@ -183,33 +171,20 @@ function QuickCharging() {
 
 /** Av/på-fliser per Hue-rom, pluss en flis som slår av alt. Vises bare når Hue er koblet til. */
 function QuickLights() {
-  const [groups, setGroups] = useState<HueGroup[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => api.hueGroups().then((g) => (setGroups(g.groups), setError(null)), (e) => setError(e.message)), []);
-
-  useEffect(() => {
-    let t: number | undefined;
-    api.hueStatus().then((s) => {
-      if (!s.connected) return;
-      load();
-      t = window.setInterval(() => document.visibilityState === 'visible' && load(), 60_000);
-    }, () => {});
-    return () => window.clearInterval(t);
-  }, [load]);
+  const { data: groups, setData: setGroups, down, reload } = useServicePoll<HueGroup[]>(
+    async () => ((await api.hueStatus()).connected ? (await api.hueGroups()).groups : OFF),
+    60_000,
+    [],
+  );
 
   async function toggle(g: HueGroup, on: boolean) {
     setBusyId(g.id);
     setGroups((list) => list?.map((x) => (x.id === g.id || g.kind === 'home' ? { ...x, on } : x)) ?? null);
-    try {
-      await api.hueSetGroup(g.id, on);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Kunne ikke endre lysene');
-    } finally {
-      await load();
-      setBusyId(null);
-    }
+    // Feiler det, henter reload riktig status – eller merker flisene som uten kontakt
+    await api.hueSetGroup(g.id, on).catch(() => {});
+    reload();
+    setBusyId(null);
   }
 
   if (!groups) return null;
@@ -218,15 +193,15 @@ function QuickLights() {
 
   return (
     <>
-      {error && <p className="error small quick-error">{error}</p>}
       {roomGroups.map((g) => (
         <button
           key={g.id}
-          className={`quick-tile quick-light ${g.on ? 'on' : ''}`}
+          className={`quick-tile quick-light ${g.on ? 'on' : ''} ${down ? 'stale' : ''}`}
           aria-pressed={g.on}
-          disabled={busyId === g.id}
+          disabled={down || busyId === g.id}
           onClick={() => toggle(g, !g.on)}
         >
+          {down && <Stale />}
           <span className="quick-head">
             <Icon name="bulb" />
             <span className="quick-name">{g.name}</span>
@@ -237,10 +212,11 @@ function QuickLights() {
       ))}
       {home && (
         <button
-          className="quick-tile quick-all"
-          disabled={busyId === home.id || !roomGroups.some((g) => g.on)}
+          className={`quick-tile quick-all ${down ? 'stale' : ''}`}
+          disabled={down || busyId === home.id || !roomGroups.some((g) => g.on)}
           onClick={() => toggle(home, false)}
         >
+          {down && <Stale />}
           <span className="quick-head">
             <Icon name="bulb" />
             <span className="quick-name">Alt lys</span>
@@ -254,40 +230,26 @@ function QuickLights() {
 
 /** Mill-enheter uten rom (f.eks. stikkontakter): trykk slår av/på, med effekt, temperatur og fukt. */
 function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: unknown }) {
-  const [devices, setDevices] = useState<Device[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(
-    () => api.independentDevices(houseId).then((r) => (setDevices(r.items), setError(null)), (e) => setError(e.message)),
-    [houseId],
+  const { data: devices, setData: setDevices, down, reload } = useServicePoll<Device[]>(
+    async () => (await api.independentDevices(houseId)).items,
+    60_000, // Mill: maks 2500 kall/time
+    [houseId, refreshKey],
   );
-
-  useEffect(() => {
-    load();
-    const t = setInterval(() => document.visibilityState === 'visible' && load(), 60_000); // Mill: maks 2500 kall/time
-    return () => clearInterval(t);
-  }, [load, refreshKey]);
 
   async function toggle(d: Device) {
     setBusyId(d.deviceId);
-    setError(null);
     setDevices((list) => list?.map((x) => (x.deviceId === d.deviceId ? { ...x, isEnabled: !d.isEnabled } : x)) ?? null);
-    try {
-      await api.setDeviceEnabled(d.deviceId, !d.isEnabled);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Kunne ikke endre enheten');
-      load();
-    } finally {
-      setBusyId(null);
-    }
+    // Feiler det, henter reload riktig status – eller merker flisene som uten kontakt
+    await api.setDeviceEnabled(d.deviceId, !d.isEnabled).catch(() => {});
+    reload();
+    setBusyId(null);
   }
 
   if (!devices) return null;
 
   return (
     <>
-      {error && <p className="error small quick-error">{error}</p>}
       {devices.map((d) => {
         const m = d.lastMetrics;
         const on = d.isConnected && d.isEnabled === true;
@@ -296,11 +258,12 @@ function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: u
         return (
           <button
             key={d.deviceId}
-            className={`quick-tile quick-device ${on ? 'on' : ''} ${d.isConnected ? '' : 'offline'}`}
+            className={`quick-tile quick-device ${on ? 'on' : ''} ${d.isConnected ? '' : 'offline'} ${down ? 'stale' : ''}`}
             aria-pressed={d.isEnabled ?? undefined}
-            disabled={!canToggle || busyId === d.deviceId}
+            disabled={down || !canToggle || busyId === d.deviceId}
             onClick={() => toggle(d)}
           >
+            {down && <Stale />}
             <span className="quick-head">
               <Icon name="plug" />
               <span className="quick-name">{d.customName?.trim() || d.deviceType.childType.name}</span>
@@ -321,8 +284,17 @@ function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: u
   );
 }
 
+/** Liten, rolig merkelapp på fliser der tjenesten ikke svarer (verdiene er sist kjente). */
+function Stale() {
+  return (
+    <span className="quick-stale" title="Tjenesten svarer ikke – viser sist kjente verdier. Prøver igjen av seg selv.">
+      Ingen kontakt
+    </span>
+  );
+}
+
 /** Rommets temperatur og luftfuktighet nå, og settpunktet for modusen som gjelder akkurat nå, med −/+ knapper. */
-function HeatTile({ room, onChanged }: { room: Room; onChanged: () => void }) {
+function HeatTile({ room, stale, onChanged }: { room: Room; stale: boolean; onChanged: () => void }) {
   const effective = room.mode === 'weekly_program' ? room.activeModeFromWeeklyProgram : room.mode;
   const key: TempKey = effective === 'sleep' ? 'roomSleepTemperature' : effective === 'away' ? 'roomAwayTemperature' : 'roomComfortTemperature';
   const [target, setTarget] = useState<number | null>(room[key]);
@@ -336,7 +308,7 @@ function HeatTile({ room, onChanged }: { room: Room; onChanged: () => void }) {
   }, [room, key]);
 
   const maxTemp = room.roomMaxTemperature ? Number(room.roomMaxTemperature) : 35;
-  const canChange = room.changeTemperature && target != null && effective !== 'off';
+  const canChange = !stale && room.changeTemperature && target != null && effective !== 'off';
 
   function adjust(delta: number) {
     if (target == null) return;
@@ -358,7 +330,8 @@ function HeatTile({ room, onChanged }: { room: Room; onChanged: () => void }) {
   }
 
   return (
-    <div className={`quick-tile quick-heat ${room.roomHeatStatus ? 'heating' : ''} ${room.isRoomOnline ? '' : 'offline'}`}>
+    <div className={`quick-tile quick-heat ${room.roomHeatStatus ? 'heating' : ''} ${room.isRoomOnline ? '' : 'offline'} ${stale ? 'stale' : ''}`}>
+      {stale && <Stale />}
       <div className="quick-head">
         <Icon name={room.roomHeatStatus ? 'flame' : 'thermometer'} />
         <span className="quick-name">{room.name}</span>
@@ -383,7 +356,7 @@ function HeatTile({ room, onChanged }: { room: Room; onChanged: () => void }) {
           <Icon name="plus" />
         </button>
       </div>
-      {error && <span className="error small">Kunne ikke lagre</span>}
+      {error && <span className="muted small">Ikke lagret – prøv igjen</span>}
     </div>
   );
 }

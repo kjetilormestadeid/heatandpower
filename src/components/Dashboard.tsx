@@ -30,6 +30,7 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
   const [programs, setPrograms] = useState<RoomProgram[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [roomsDown, setRoomsDown] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -52,8 +53,10 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
       setIndependentCount(r.independentDeviceIds.length);
       setUpdatedAt(new Date());
       setError(null);
+      setRoomsDown(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kunne ikke hente rom');
+      setRoomsDown(true);
     }
   }, [houseId]);
 
@@ -136,13 +139,15 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
       </header>
 
       <main ref={mainRef}>
-        {error && <p className="error banner">{error}</p>}
+        {/* Har vi rom fra før, vises feilen rolig på flisene i stedet */}
+        {error && !rooms && <p className="error banner">{error}</p>}
         {houses && houses.length === 0 && <p className="muted">Ingen hus funnet på denne kontoen.</p>}
 
         {houseId && (
           <QuickPanel
             houseId={houseId}
             rooms={rooms}
+            roomsDown={roomsDown}
             independentCount={independentCount}
             refreshKey={reloadKey}
             onRoomsChanged={() => {

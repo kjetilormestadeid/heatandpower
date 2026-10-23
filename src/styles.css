@@ -502,3 +502,41 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 @keyframes cal-slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes cal-slide-out { from { transform: none; opacity: 1; } to { transform: translateX(-40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .cal-ticker-item, .cal-ticker-item.leaving { animation: none; } }
+
+/* --- pulserende glød på fliser som varmer, lyser eller lader --- */
+.quick-tile { position: relative; }
+.quick-heat.heating, .quick-light.on, .quick-ev.charging { --glow: var(--heat); }
+.quick-light.on { --glow: var(--lit); }
+.quick-ev.charging { --glow: var(--series-3); }
+/* Gløden ligger i et eget lag og animeres med opacity, så nettbrettet slipper å tegne skyggen på nytt hele tiden */
+.quick-heat.heating::after, .quick-light.on::after, .quick-ev.charging::after {
+  content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 2px var(--glow), 0 0 18px 2px color-mix(in srgb, var(--glow) 55%, transparent);
+  opacity: 0; animation: tile-glow 2.4s ease-in-out infinite;
+}
+.quick-heat.heating .quick-head .icon-svg, .quick-light.on .quick-head .icon-svg, .quick-ev.charging .quick-head .icon-svg {
+  animation: tile-icon 2.4s ease-in-out infinite;
+}
+.quick-heat.heating { background: color-mix(in srgb, var(--heat-bg) 70%, var(--bg)); }
+@keyframes tile-glow { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
+@keyframes tile-icon { 0%, 100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.2); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .quick-heat.heating::after, .quick-light.on::after, .quick-ev.charging::after { animation: none; opacity: 0.7; }
+  .quick-heat.heating .quick-head .icon-svg, .quick-light.on .quick-head .icon-svg, .quick-ev.charging .quick-head .icon-svg { animation: none; }
+}
+
+/* --- fliser der tjenesten ikke svarer: sist kjente verdier, dempet, uten puls --- */
+.quick-stale {
+  position: absolute; top: 8px; right: 8px; z-index: 1;
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; color: var(--muted); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
+}
+.quick-stale::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.quick-tile.stale, .cal-ticker.stale { filter: grayscale(0.7); }
+.quick-tile.stale > :not(.quick-stale), .cal-ticker.stale > :not(.quick-stale), .quick-energy.stale > :not(.quick-stale) { opacity: 0.55; }
+.quick-tile.stale:disabled { opacity: 1; } /* dempingen over gjelder, ikke den vanlige disabled-blekingen i tillegg */
+.quick-tile.stale::after, .quick-tile.stale .quick-head .icon-svg { animation: none !important; }
+.quick-tile.stale::after { opacity: 0 !important; }
+.quick-energy.stale { position: relative; padding-top: 24px; }
+.quick-energy.stale .quick-stale { top: 0; left: 0; right: auto; }
