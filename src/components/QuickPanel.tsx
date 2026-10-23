@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { EaseeCharger, EaseeState, HueGroup, Room, TibberConsumption, TibberLive } from '../types';
+import type { Device, EaseeCharger, EaseeState, HueGroup, Room, TibberConsumption, TibberLive } from '../types';
 import { MODE_LABEL, fmtTemp } from '../format';
 import { dayCost } from '../pricing';
 import { Icon } from './Icon';
@@ -10,7 +10,20 @@ import { CalendarTicker } from './CalendarDrawer';
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
 
 /** Hurtigpanel øverst for nettbrett: totalforbruk, og så elbil, lys og varme som én strøm av fliser. */
-export function QuickPanel({ rooms, onRoomsChanged }: { rooms: Room[] | null; onRoomsChanged: () => void }) {
+export function QuickPanel({
+  houseId,
+  rooms,
+  independentCount,
+  refreshKey,
+  onRoomsChanged,
+}: {
+  houseId: string;
+  rooms: Room[] | null;
+  /** antall enheter uten rom – de hentes bare når det finnes noen */
+  independentCount: number;
+  refreshKey?: unknown;
+  onRoomsChanged: () => void;
+}) {
   return (
     <section className="card quick">
       <div className="quick-top">
@@ -23,6 +36,7 @@ export function QuickPanel({ rooms, onRoomsChanged }: { rooms: Room[] | null; on
         {rooms?.map((r) => (
           <HeatTile key={r.id} room={r} onChanged={onRoomsChanged} />
         ))}
+        {independentCount > 0 && <QuickDevices houseId={houseId} refreshKey={refreshKey} />}
       </div>
     </section>
   );
@@ -180,7 +194,7 @@ function QuickLights() {
     api.hueStatus().then((s) => {
       if (!s.connected) return;
       load();
-      t = window.setInterval(() => document.visibilityState === 'visible' && load(), 30_000);
+      t = window.setInterval(() => document.visibilityState === 'visible' && load(), 60_000);
     }, () => {});
     return () => window.clearInterval(t);
   }, [load]);
@@ -234,6 +248,75 @@ function QuickLights() {
           <strong className="quick-value">Slå av</strong>
         </button>
       )}
+    </>
+  );
+}
+
+/** Mill-enheter uten rom (f.eks. stikkontakter): trykk slår av/på, med effekt, temperatur og fukt. */
+function QuickDevices({ houseId, refreshKey }: { houseId: string; refreshKey?: unknown }) {
+  const [devices, setDevices] = useState<Device[] | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    () => api.independentDevices(houseId).then((r) => (setDevices(r.items), setError(null)), (e) => setError(e.message)),
+    [houseId],
+  );
+
+  useEffect(() => {
+    load();
+    const t = setInterval(() => document.visibilityState === 'visible' && load(), 60_000); // Mill: maks 2500 kall/time
+    return () => clearInterval(t);
+  }, [load, refreshKey]);
+
+  async function toggle(d: Device) {
+    setBusyId(d.deviceId);
+    setError(null);
+    setDevices((list) => list?.map((x) => (x.deviceId === d.deviceId ? { ...x, isEnabled: !d.isEnabled } : x)) ?? null);
+    try {
+      await api.setDeviceEnabled(d.deviceId, !d.isEnabled);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Kunne ikke endre enheten');
+      load();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!devices) return null;
+
+  return (
+    <>
+      {error && <p className="error small quick-error">{error}</p>}
+      {devices.map((d) => {
+        const m = d.lastMetrics;
+        const on = d.isConnected && d.isEnabled === true;
+        const power = Math.round(m?.currentPower ?? 0);
+        const canToggle = d.isEnabled != null && d.isConnected;
+        return (
+          <button
+            key={d.deviceId}
+            className={`quick-tile quick-device ${on ? 'on' : ''} ${d.isConnected ? '' : 'offline'}`}
+            aria-pressed={d.isEnabled ?? undefined}
+            disabled={!canToggle || busyId === d.deviceId}
+            onClick={() => toggle(d)}
+          >
+            <span className="quick-head">
+              <Icon name="plug" />
+              <span className="quick-name">{d.customName?.trim() || d.deviceType.childType.name}</span>
+            </span>
+            <strong className="quick-value">
+              {!d.isConnected ? 'Frakoblet' : d.isEnabled == null ? `${power} W` : on ? 'På' : 'Av'}
+              {on && power > 0 && <span className="muted small">{power} W</span>}
+            </strong>
+            <span className="muted small">
+              {m?.temperatureAmbient != null ? fmtTemp(m.temperatureAmbient) : d.deviceType.parentType.name}
+              {/* Ovner melder fukt 0 – vis bare ekte målinger */}
+              {(m?.humidity ?? 0) > 0 && ` · ${Math.round(m!.humidity!)} % fukt`}
+            </span>
+          </button>
+        );
+      })}
     </>
   );
 }

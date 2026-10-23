@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Device, Room, TibberLive } from '../types';
 import { hueWatts } from './HueSection';
@@ -37,6 +37,8 @@ const toActive = (d: Device, room: string | null): ActiveDevice => ({
 });
 
 /** Henter alle enheter i huset (per rom + uten rom) og viser tydelig hva som står på akkurat nå. */
+const DEVICES_POLL_MS = 2 * 60_000;
+
 export function ActiveNow({ houseId, rooms, refreshKey }: { houseId: string; rooms: Room[]; refreshKey?: unknown }) {
   const [devices, setDevices] = useState<ActiveDevice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +60,21 @@ export function ActiveNow({ houseId, rooms, refreshKey }: { houseId: string; roo
     };
   }, []);
 
+  // Rommene lastes på nytt hvert minutt (nytt array hver gang) – hent bare enhetene på nytt når
+  // settet av rom endrer seg, ved egne endringer (refreshKey) eller på eget, roligere intervall.
+  // Hvert rom er ett Mill-kall, og Mill tillater 2500 kall/time.
+  const roomsRef = useRef(rooms);
+  roomsRef.current = rooms;
+  const roomKey = rooms.map((r) => `${r.id}:${r.name}`).join('|');
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => document.visibilityState === 'visible' && setTick((n) => n + 1), DEVICES_POLL_MS);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+    const rooms = roomsRef.current;
     Promise.all([
       ...rooms.map((r) => api.roomDevices(r.id).then((res) => res.devices.map((d) => toActive(d, r.name)))),
       api.independentDevices(houseId).then((res) => res.items.map((d) => toActive(d, null))),
@@ -95,7 +110,7 @@ export function ActiveNow({ houseId, rooms, refreshKey }: { houseId: string; roo
     return () => {
       cancelled = true;
     };
-  }, [houseId, rooms, refreshKey]);
+  }, [houseId, roomKey, refreshKey, tick]);
 
   return (
     <section className="card active-now">

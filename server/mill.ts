@@ -4,7 +4,8 @@ import path from 'node:path';
 
 const MILL_API_BASE = process.env.MILL_API_BASE ?? 'https://api.millnorwaycloud.com';
 const SESSION_FILE = path.resolve('data', 'sessions.json');
-const GET_CACHE_MS = 10_000;
+// Mill tillater 2500 kall/time per konto. Leseresultater deles mellom alle skjermer/økter på samme konto.
+const READ_CACHE_MS = 50_000; // litt under appens 60 s-intervall, så alle skjermer deler samme henting
 
 export class MillError extends Error {
   constructor(
@@ -27,20 +28,41 @@ interface Session extends Tokens {
 
 interface RuntimeState {
   refreshing?: Promise<void>;
-  cache: Map<string, { at: number; status: number; data: unknown }>;
+}
+
+type MillResponse = { status: number; data: unknown };
+
+interface AccountCache {
+  hits: Map<string, { at: number } & MillResponse>;
+  /** Kall som pågår – like kall samtidig (flere rom, flere skjermer) venter på samme svar */
+  inflight: Map<string, Promise<MillResponse>>;
 }
 
 const sessions = new Map<string, Session>();
 const runtime = new Map<string, RuntimeState>();
+const accounts = new Map<string, AccountCache>();
 
 function state(sid: string): RuntimeState {
   let s = runtime.get(sid);
   if (!s) {
-    s = { cache: new Map() };
+    s = {};
     runtime.set(sid, s);
   }
   return s;
 }
+
+function accountCache(sid: string): AccountCache {
+  const key = sessions.get(sid)?.login.trim().toLowerCase() ?? sid;
+  let c = accounts.get(key);
+  if (!c) {
+    c = { hits: new Map(), inflight: new Map() };
+    accounts.set(key, c);
+  }
+  return c;
+}
+
+/** Statistikk hentes med POST, men er en ren lesing og kan caches som GET. */
+const isRead = (method: string, urlPath: string) => method === 'GET' || (method === 'POST' && urlPath.endsWith('/statistics'));
 
 // --- persistens: refresh-tokens er engangs og må overleve omstart ---
 
@@ -154,29 +176,43 @@ async function validToken(sid: string) {
   return sessions.get(sid)!.idToken;
 }
 
-/** Autentisert kall mot Mill med auto-refresh, kort GET-cache og én retry ved 429. */
-export async function millRequest(sid: string, method: string, urlPath: string, body?: unknown) {
-  const st = state(sid);
-  const isGet = method === 'GET';
+/** Autentisert kall mot Mill med auto-refresh, felles lese-cache per konto og én retry ved 429. */
+export async function millRequest(sid: string, method: string, urlPath: string, body?: unknown): Promise<MillResponse> {
+  const cache = accountCache(sid);
+  const read = isRead(method, urlPath);
 
-  if (isGet) {
-    const hit = st.cache.get(urlPath);
-    if (hit && Date.now() - hit.at < GET_CACHE_MS) return { status: hit.status, data: hit.data };
-  } else {
-    st.cache.clear();
+  if (!read) {
+    // Endringer: tøm cachen så neste lesing viser det nye
+    cache.hits.clear();
+    return send(sid, method, urlPath, body, false);
   }
 
+  const key = `${method} ${urlPath} ${body !== undefined ? JSON.stringify(body) : ''}`;
+  const hit = cache.hits.get(key);
+  if (hit && Date.now() - hit.at < READ_CACHE_MS) return { status: hit.status, data: hit.data };
+  const pending = cache.inflight.get(key);
+  if (pending) return pending;
+
+  const p = send(sid, method, urlPath, body, true)
+    .then((res) => {
+      if (res.status === 200) cache.hits.set(key, { at: Date.now(), ...res });
+      return res;
+    })
+    .finally(() => cache.inflight.delete(key));
+  cache.inflight.set(key, p);
+  return p;
+}
+
+async function send(sid: string, method: string, urlPath: string, body: unknown, read: boolean): Promise<MillResponse> {
   let res = await call(method, urlPath, await validToken(sid), body);
   if (res.status === 401) {
     await refresh(sid);
     res = await call(method, urlPath, sessions.get(sid)!.idToken, body);
   }
-  if (res.status === 429 && isGet) {
+  if (res.status === 429 && read) {
     await new Promise((r) => setTimeout(r, 2000));
     res = await call(method, urlPath, sessions.get(sid)!.idToken, body);
   }
-
-  if (isGet && res.status === 200) st.cache.set(urlPath, { at: Date.now(), ...res });
   return res;
 }
 

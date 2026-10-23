@@ -141,7 +141,10 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
 
         {houseId && (
           <QuickPanel
+            houseId={houseId}
             rooms={rooms}
+            independentCount={independentCount}
+            refreshKey={reloadKey}
             onRoomsChanged={() => {
               loadRooms();
               setReloadKey((k) => k + 1);

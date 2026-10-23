@@ -117,12 +117,37 @@ async function ensureAppKey() {
 }
 
 export async function hueDisconnect() {
+  readCache.clear();
   await save(null);
 }
 
 // --- CLIP v2 ----------------------------------------------------------------
 
+// Hue Remote API går via skyen: cache lesinger kort og del dem mellom alle skjermer, tøm ved endringer
+// Lys og gruppestatus endrer seg; rom/soner/hjem nesten aldri (tømmes uansett ved navnebytte, som er en PUT)
+const READ_CACHE_MS = 15_000;
+const STRUCTURE_CACHE_MS = 10 * 60_000;
+const STRUCTURE = new Set(['room', 'zone', 'bridge_home']);
+const readCache = new Map<string, { at: number; data: unknown }>();
+const readInflight = new Map<string, Promise<unknown>>();
+
 async function clip<T>(method: 'GET' | 'PUT', resource: string, body?: unknown, retried = false): Promise<T> {
+  if (method === 'PUT') {
+    readCache.clear();
+    return clipRaw<T>(method, resource, body, retried);
+  }
+  const hit = readCache.get(resource);
+  if (hit && Date.now() - hit.at < (STRUCTURE.has(resource) ? STRUCTURE_CACHE_MS : READ_CACHE_MS)) return hit.data as T;
+  const pending = readInflight.get(resource);
+  if (pending) return pending as Promise<T>;
+  const p = clipRaw<T>(method, resource, body, retried)
+    .then((data) => (readCache.set(resource, { at: Date.now(), data }), data))
+    .finally(() => readInflight.delete(resource));
+  readInflight.set(resource, p);
+  return p;
+}
+
+async function clipRaw<T>(method: 'GET' | 'PUT', resource: string, body?: unknown, retried = false): Promise<T> {
   const res = await fetch(`${HUE}/route/clip/v2/resource/${resource}`, {
     method,
     headers: {
@@ -136,7 +161,7 @@ async function clip<T>(method: 'GET' | 'PUT', resource: string, body?: unknown, 
     // Token kan være trukket tilbake – tving fornyelse én gang
     const s = await load();
     if (s) await save({ ...s, expiresAt: 0 });
-    return clip<T>(method, resource, body, true);
+    return clipRaw<T>(method, resource, body, true);
   }
   const data = (await res.json().catch(() => null)) as { data?: T; errors?: { description: string }[] } | null;
   if (!res.ok) throw new HueError(res.status === 429 ? 429 : 502, data?.errors?.[0]?.description ?? `Hue ${res.status}`);

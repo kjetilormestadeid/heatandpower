@@ -413,6 +413,9 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .quick-heat-btns button:active:not(:disabled) { transform: scale(0.96); }
 
 .quick-ev.charging { border-color: var(--series-3); }
+.quick-device.on { border-color: var(--accent); }
+.quick-device.on .quick-head { color: var(--accent); }
+.quick-device.offline { opacity: 0.6; }
 .quick-ev.charging .quick-head { color: var(--series-3); }
 
 /* --- topplinje: husvalg og klokke --- */
