@@ -384,19 +384,19 @@ strong.diag-warn { color: var(--warn); }
 .quick-energy { display: flex; gap: 28px; flex-wrap: wrap; }
 .quick-stat { display: flex; flex-direction: column; }
 .quick-stat strong { font-size: 1.9rem; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 8px; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 10px; }
 .quick-error { grid-column: 1 / -1; }
 
 .quick-tile {
   display: flex; flex-direction: column; align-items: stretch; gap: 2px;
-  min-height: 92px; padding: 10px 12px; text-align: left;
-  border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
+  min-height: 112px; padding: 12px 14px; text-align: left;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text);
   font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
 }
 .quick-head { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
 .quick-head .icon-svg { flex-shrink: 0; }
-.quick-name { font-weight: 700; font-size: 0.9rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quick-value { display: flex; align-items: baseline; gap: 8px; font-size: 1.45rem; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.quick-name { font-weight: 700; font-size: 1rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-value { display: flex; align-items: baseline; gap: 8px; font-size: 1.75rem; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .quick-humidity { display: inline-flex; align-items: center; gap: 2px; font-weight: 400; }
 button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 
@@ -409,7 +409,7 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .quick-heat.heating .quick-head { color: var(--heat); }
 .quick-heat.offline { opacity: 0.6; }
 .quick-heat-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; padding-top: 6px; }
-.quick-heat-btns button { min-height: 40px; padding: 0; font-size: 1.2rem; display: grid; place-items: center; touch-action: manipulation; }
+.quick-heat-btns button { min-height: 48px; padding: 0; font-size: 1.35rem; display: grid; place-items: center; touch-action: manipulation; }
 .quick-heat-btns button:active:not(:disabled) { transform: scale(0.96); }
 
 .quick-ev.charging { border-color: var(--series-3); }
