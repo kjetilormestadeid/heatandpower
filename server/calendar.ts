@@ -2,6 +2,7 @@
 // URL-ene har ofte en hemmelig token, så de ligger i .env (CALENDAR_ICS_URL, kommaseparert for flere).
 
 const CACHE_MS = 15 * 60_000;
+const FRESH_MIN_MS = 30_000; // «Oppdater» henter på nytt, men ikke oftere enn dette
 const DAY = 86_400_000;
 
 export class CalendarError extends Error {
@@ -35,9 +36,9 @@ export const calendarConfigured = () => urls().length > 0;
 
 const cache = new Map<string, { at: number; text: string }>();
 
-async function fetchIcs(url: string) {
+async function fetchIcs(url: string, fresh: boolean) {
   const hit = cache.get(url);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.text;
+  if (hit && Date.now() - hit.at < (fresh ? FRESH_MIN_MS : CACHE_MS)) return hit.text;
   const res = await fetch(url, { headers: { 'user-agent': 'mill-dashboard/0.1', accept: 'text/calendar' } });
   if (!res.ok) {
     // Bruk forrige versjon heller enn å tømme kalenderen ved et midlertidig brudd
@@ -49,10 +50,10 @@ async function fetchIcs(url: string) {
   return text;
 }
 
-/** Hendelser som overlapper [from, to), sortert på start. */
-export async function calendarEvents(from: Date, to: Date): Promise<CalendarEvent[]> {
+/** Hendelser som overlapper [from, to), sortert på start. `fresh` hopper over mellomlageret (manuell oppdatering). */
+export async function calendarEvents(from: Date, to: Date, fresh = false): Promise<CalendarEvent[]> {
   if (!calendarConfigured()) throw new CalendarError(503, 'CALENDAR_ICS_URL er ikke satt i .env');
-  const texts = await Promise.all(urls().map(fetchIcs));
+  const texts = await Promise.all(urls().map((u) => fetchIcs(u, fresh)));
   const events = texts.flatMap((t) => expand(parse(t), from.getTime(), to.getTime()));
   return events.sort((a, b) => sortKey(a) - sortKey(b) || a.title.localeCompare(b.title, 'nb'));
 }

@@ -46,14 +46,21 @@ function setCal(patch: Partial<CalendarState>) {
   listeners.forEach((l) => l());
 }
 
+const loadCalendar = (fresh = false) =>
+  api.calendarEvents(DAYS, fresh).then(
+    (r) => setCal({ events: r.events, error: null }),
+    (e) => setCal({ error: e instanceof Error ? e.message : 'Kunne ikke hente kalenderen' }),
+  );
+
+/** Henter kalenderen på nytt direkte fra kildene (brukes av «Oppdater» i topplinjen). */
+export function refreshCalendar() {
+  if (calState.configured) return loadCalendar(true);
+}
+
 function startCalendar() {
   if (started) return;
   started = true;
-  const load = () =>
-    api.calendarEvents(DAYS).then(
-      (r) => setCal({ events: r.events, error: null }),
-      (e) => setCal({ error: e instanceof Error ? e.message : 'Kunne ikke hente kalenderen' }),
-    );
+  const load = () => loadCalendar();
   api.calendarStatus().then((s) => {
     if (!s.configured) return;
     setCal({ configured: true });

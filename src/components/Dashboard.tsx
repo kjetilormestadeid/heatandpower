@@ -17,7 +17,7 @@ import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { QuickPanel } from './QuickPanel';
 import { Clock } from './Clock';
-import { CalendarDrawer } from './CalendarDrawer';
+import { CalendarDrawer, refreshCalendar } from './CalendarDrawer';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
 const IDLE_MS = 90_000; // tilbake til hurtigpanelet etter så lang tid uten berøring
@@ -123,7 +123,12 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
         )}
         <CalendarDrawer />
         {house && (
-          <button onClick={loadRooms} aria-label="Oppdater" title="Oppdater">
+          <button
+            onClick={() => {
+              loadRooms();
+              refreshCalendar();
+            }}
+          >
             Oppdater
           </button>
         )}

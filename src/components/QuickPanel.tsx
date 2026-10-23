@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { EaseeCharger, EaseeState, HueGroup, Room, TibberLive } from '../types';
+import type { EaseeCharger, EaseeState, HueGroup, Room, TibberConsumption, TibberLive } from '../types';
 import { MODE_LABEL, fmtTemp } from '../format';
+import { dayCost } from '../pricing';
 import { Icon } from './Icon';
 import { easeeMode } from './EaseeSection';
 import { CalendarTicker } from './CalendarDrawer';
@@ -27,9 +28,34 @@ export function QuickPanel({ rooms, onRoomsChanged }: { rooms: Room[] | null; on
   );
 }
 
-/** Tibber Pulse gir effekt nå og forbruk siden midnatt; uten Tibber vises Mill-ovnenes sum i dag. */
+/** Tibber Pulse gir effekt nå og forbruk siden midnatt; uten Tibber vises Mill-ovnenes sum i dag.
+ *  Kostnaden regnes selv med Norgespris + Elvia-nettleie (se pricing.ts), ikke Tibbers spotpris. */
 function QuickEnergy({ rooms }: { rooms: Room[] | null }) {
   const [live, setLive] = useState<TibberLive | null>(null);
+  const [hourly, setHourly] = useState<TibberConsumption[]>([]);
+
+  // Timeforbruket fordeler dagens kWh på dag-/nattpris i nettleien
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      api.tibberStatus()
+        .then(async (s) => {
+          if (!s.configured) return;
+          const { homes } = await api.tibberHomes();
+          const saved = localStorage.getItem('tibber.homeId');
+          const id = homes.some((h) => h.id === saved) ? saved! : homes[0]?.id;
+          if (!id) return;
+          const o = await api.tibberOverview(id, 'HOURLY');
+          if (!stop) setHourly(o.hourly?.nodes ?? []);
+        })
+        .catch(() => {});
+    load();
+    const t = setInterval(() => document.visibilityState === 'visible' && load(), 5 * 60_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, []);
 
   useEffect(() => {
     let stop = false;
@@ -48,6 +74,7 @@ function QuickEnergy({ rooms }: { rooms: Room[] | null }) {
 
   const millWh = rooms?.reduce((s, r) => s + r.roomEnergyUsage, 0) ?? 0;
   const num = (v: number, digits: number) => v.toLocaleString('nb-NO', { maximumFractionDigits: digits });
+  const cost = live ? costToday(live, hourly) : null;
 
   return (
     <div className="quick-energy">
@@ -61,10 +88,13 @@ function QuickEnergy({ rooms }: { rooms: Room[] | null }) {
             <span className="muted small">Totalt i dag</span>
             <strong>{num(live.accumulatedConsumption, 1)} kWh</strong>
           </div>
-          {live.accumulatedCost != null && (
-            <div className="quick-stat">
+          {cost && (
+            <div className="quick-stat" title="Norgespris 50 øre + Tibber-påslag 3,40 øre og fastbeløp 49 kr/mnd + Elvia-nettleie (energiledd og fastledd 10–15 kW), inkl. mva og avgifter">
               <span className="muted small">Kostnad i dag</span>
-              <strong>{num(live.accumulatedCost, 0)} kr</strong>
+              <strong>{num(cost.total, 0)} kr</strong>
+              <span className="muted small">
+                strøm {num(cost.energy, 0)} · nett {num(cost.grid, 0)} · faste {num(cost.fixed, 0)}
+              </span>
             </div>
           )}
         </>
@@ -78,6 +108,19 @@ function QuickEnergy({ rooms }: { rooms: Room[] | null }) {
       )}
     </div>
   );
+}
+
+/** Dagens kostnad: fullførte timer fra Tibber, resten av Pulse-forbruket på timen som går nå. */
+function costToday(live: TibberLive, hourly: TibberConsumption[]) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const done = hourly
+    .map((n) => ({ from: new Date(n.from), kwh: n.consumption ?? 0 }))
+    .filter((h) => h.from >= today && h.from < now);
+  const doneKwh = done.reduce((s, h) => s + h.kwh, 0);
+  const hourStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
+  const rest = Math.max(0, live.accumulatedConsumption - doneKwh);
+  return dayCost(today, [...done, { from: hourStart, kwh: rest }]);
 }
 
 /** Om elbilene lader nå: status, effekt og energi i økten per Easee-lader. Vises bare når Easee er satt opp. */

@@ -139,7 +139,8 @@ export const api = {
     request('POST', `/api/sonos/groups/${encodeURIComponent(groupId)}/favorite`, { favoriteId }),
 
   calendarStatus: () => request<{ configured: boolean }>('GET', '/api/calendar/status'),
-  calendarEvents: (days: number) => request<{ events: CalendarEvent[] }>('GET', `/api/calendar/events?days=${days}`),
+  calendarEvents: (days: number, fresh = false) =>
+    request<{ events: CalendarEvent[] }>('GET', `/api/calendar/events?days=${days}${fresh ? '&fresh=1' : ''}`),
 
   millNetworkDiagnostics: () => request<MillNetworkDiagnostics>('GET', '/api/diagnostics/mill-network'),
 

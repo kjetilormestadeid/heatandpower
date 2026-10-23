@@ -151,7 +151,7 @@ app.get('/api/calendar/events', requireSession, async (req, res) => {
   const to = new Date(from);
   to.setDate(to.getDate() + days);
   try {
-    res.json({ events: await calendarEvents(from, to) });
+    res.json({ events: await calendarEvents(from, to, req.query.fresh === '1') });
   } catch (err) {
     if (err instanceof CalendarError) res.status(err.status).json({ error: { message: err.message } });
     else sendError(res, err);
