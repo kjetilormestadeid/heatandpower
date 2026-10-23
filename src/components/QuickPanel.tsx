@@ -4,6 +4,7 @@ import type { EaseeCharger, EaseeState, HueGroup, Room, TibberLive } from '../ty
 import { MODE_LABEL, fmtTemp } from '../format';
 import { Icon } from './Icon';
 import { easeeMode } from './EaseeSection';
+import { CalendarTicker } from './CalendarDrawer';
 
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
 
@@ -11,7 +12,10 @@ type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemp
 export function QuickPanel({ rooms, onRoomsChanged }: { rooms: Room[] | null; onRoomsChanged: () => void }) {
   return (
     <section className="card quick">
-      <QuickEnergy rooms={rooms} />
+      <div className="quick-top">
+        <QuickEnergy rooms={rooms} />
+        <CalendarTicker />
+      </div>
       <div className="quick-grid">
         <QuickCharging />
         <QuickLights />

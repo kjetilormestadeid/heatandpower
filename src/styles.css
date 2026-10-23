@@ -475,3 +475,27 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .cal-later > h3 { margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .cal-later .cal-day h3 { text-transform: capitalize; }
 @media (prefers-reduced-motion: reduce) { .cal-drawer, .cal-backdrop { transition: none; } }
+
+/* --- kalenderstripe ved siden av forbruket --- */
+.quick-top { display: flex; align-items: stretch; gap: 16px 28px; flex-wrap: wrap; }
+.quick-top .quick-energy { flex: 0 1 auto; }
+.cal-ticker {
+  flex: 1 1 280px; min-width: 0; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center; gap: 6px;
+  height: 96px; padding: 10px 14px; text-align: left;
+  background: var(--bg); border-radius: 10px; touch-action: manipulation;
+}
+.cal-ticker-item {
+  display: flex; flex-direction: column; min-width: 0;
+  padding-left: 10px; border-left: 3px solid var(--cal-color, var(--accent));
+  animation: cal-slide-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.cal-ticker-item.leaving { animation: cal-slide-out 0.35s ease-in forwards; }
+.cal-ticker-item strong { font-size: 1.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ticker-loc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ticker-dots { display: flex; gap: 4px; padding-left: 10px; }
+.cal-ticker-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.cal-ticker-dots i.on { background: var(--text-2); }
+@keyframes cal-slide-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes cal-slide-out { from { transform: none; opacity: 1; } to { transform: translateX(-40px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cal-ticker-item, .cal-ticker-item.leaving { animation: none; } }
