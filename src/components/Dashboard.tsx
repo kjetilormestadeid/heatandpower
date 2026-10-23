@@ -16,6 +16,7 @@ import { PresenceSection } from './PresenceSection';
 import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
 import { QuickPanel } from './QuickPanel';
+import { Clock } from './Clock';
 
 const POLL_MS = 60_000; // Mill tillater 2500 kall/time per kunde
 
@@ -68,38 +69,37 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
   return (
     <div className="layout">
       <header className="topbar">
-        <div className="brand">Mill Oversikt</div>
-        {houses && houses.length > 0 && (
-          <select value={houseId ?? ''} onChange={(e) => setHouseId(e.target.value)} aria-label="Velg hus">
+        {houses && houses.length > 1 ? (
+          <select className="house-select" value={houseId ?? ''} onChange={(e) => setHouseId(e.target.value)} aria-label="Velg hus">
             {houses.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.name}
               </option>
             ))}
           </select>
+        ) : (
+          <div className="brand">{house?.name ?? 'Mill Oversikt'}</div>
         )}
+        {house && <span className="pill">{house.isVacationModeActive ? 'Ferie' : MODE_LABEL[house.mode ?? 'weekly_program']}</span>}
         <div className="spacer" />
-        <span className="muted small hide-sm">{user}</span>
-        <button onClick={onLogout}>Logg ut</button>
+        <Clock />
+        <div className="spacer" />
+        {updatedAt && (
+          <span className="muted small hide-sm">
+            Oppdatert {updatedAt.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+        {house && (
+          <button onClick={loadRooms} aria-label="Oppdater" title="Oppdater">
+            Oppdater
+          </button>
+        )}
+        <button onClick={onLogout} title={user}>Logg ut</button>
       </header>
 
       <main>
         {error && <p className="error banner">{error}</p>}
         {houses && houses.length === 0 && <p className="muted">Ingen hus funnet på denne kontoen.</p>}
-
-        {house && (
-          <div className="section-head">
-            <h2>{house.name}</h2>
-            <span className="pill">{house.isVacationModeActive ? 'Ferie' : MODE_LABEL[house.mode ?? 'weekly_program']}</span>
-            <div className="spacer" />
-            {updatedAt && (
-              <span className="muted small">
-                Oppdatert {updatedAt.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            )}
-            <button onClick={loadRooms}>Oppdater</button>
-          </div>
-        )}
 
         {houseId && (
           <QuickPanel

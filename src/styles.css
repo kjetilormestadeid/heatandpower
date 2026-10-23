@@ -411,3 +411,14 @@ strong.diag-warn { color: var(--warn); }
 .quick-heat-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .quick-heat-btns button { min-height: 56px; font-size: 1.5rem; display: grid; place-items: center; touch-action: manipulation; }
 .quick-heat-btns button:active:not(:disabled) { transform: scale(0.96); }
+
+/* --- topplinje: husvalg og klokke --- */
+.house-select { font-weight: 700; font-size: 1.05rem; min-height: 44px; }
+.topbar button { min-height: 44px; }
+.clock { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.clock-time { font-size: 1.9rem; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1; }
+.clock-date { text-transform: capitalize; }
+.quick-ev { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+.quick-ev strong { font-size: 1.6rem; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.quick-ev .quick-heat-head { color: var(--series-3); }
+.quick-ev.charging { border-color: var(--series-3); }

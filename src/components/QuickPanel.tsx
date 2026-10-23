@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { HueGroup, Room, TibberLive } from '../types';
+import type { EaseeCharger, EaseeState, HueGroup, Room, TibberLive } from '../types';
 import { MODE_LABEL, fmtTemp } from '../format';
 import { Icon } from './Icon';
+import { easeeMode } from './EaseeSection';
 
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
 
@@ -11,6 +12,7 @@ export function QuickPanel({ rooms, onRoomsChanged }: { rooms: Room[] | null; on
   return (
     <section className="card quick">
       <QuickEnergy rooms={rooms} />
+      <QuickCharging />
       <QuickLights />
       {rooms && rooms.length > 0 && (
         <div className="quick-block">
@@ -75,6 +77,57 @@ function QuickEnergy({ rooms }: { rooms: Room[] | null }) {
           </div>
         )
       )}
+    </div>
+  );
+}
+
+/** Om elbilene lader nå: status, effekt og energi i økten per Easee-lader. Vises bare når Easee er satt opp. */
+function QuickCharging() {
+  const [chargers, setChargers] = useState<{ charger: EaseeCharger; state: EaseeState | null }[] | null>(null);
+
+  useEffect(() => {
+    let stop = false;
+    let t: number | undefined;
+    api.easeeStatus().then(async (s) => {
+      if (!s.configured) return;
+      const { chargers: list } = await api.easeeChargers();
+      const load = () =>
+        Promise.all(
+          list.map((c) => api.easeeCharger(c.id).then((d) => ({ charger: c, state: d.state }), () => ({ charger: c, state: null }))),
+        ).then((r) => !stop && setChargers(r));
+      load();
+      t = window.setInterval(() => document.visibilityState === 'visible' && load(), 30_000);
+    }).catch(() => {});
+    return () => {
+      stop = true;
+      window.clearInterval(t);
+    };
+  }, []);
+
+  if (!chargers?.length) return null;
+  const num = (v: number) => v.toLocaleString('nb-NO', { maximumFractionDigits: 1 });
+
+  return (
+    <div className="quick-block">
+      <h2>Elbil</h2>
+      <div className="quick-grid heat">
+        {chargers.map(({ charger, state }) => {
+          const charging = state?.chargerOpMode === 3;
+          return (
+            <div key={charger.id} className={`quick-ev ${charging ? 'charging' : ''}`}>
+              <div className="quick-heat-head">
+                <span className="quick-name">{charger.name || 'Elbillader'}</span>
+                {charging && <Icon name="bolt" />}
+              </div>
+              <strong>{state ? (charging ? `${num(state.totalPower)} kW` : easeeMode(state.chargerOpMode).label) : 'Utilgjengelig'}</strong>
+              <span className="muted small">
+                {charging ? 'Lader nå' : 'Lader ikke'}
+                {state && state.sessionEnergy > 0 ? ` · ${num(state.sessionEnergy)} kWh denne økten` : ''}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
