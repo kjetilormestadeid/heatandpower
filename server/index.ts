@@ -380,9 +380,9 @@ app.post('/api/appliances/identify/cancel', requireSession, (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/appliances/identify/analyze', requireSession, async (_req, res) => {
+app.post('/api/appliances/identify/analyze', requireSession, async (req, res) => {
   try {
-    res.json(await analyzeIdentify());
+    res.json(await analyzeIdentify(typeof req.body?.hint === 'string' ? req.body.hint : ''));
   } catch (err) {
     sendApplianceError(res, err);
   }

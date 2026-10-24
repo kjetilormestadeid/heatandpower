@@ -206,7 +206,8 @@ export function cancelIdentify() {
 
 /** Målinger siden identifiseringen startet. */
 export function identifySamples() {
-  return { startedAt: identifyStartedAt && new Date(identifyStartedAt).toISOString(), samples: identifyStartedAt ? powerHistory(identifyStartedAt) : [] };
+  const samples = identifyStartedAt ? powerHistory(identifyStartedAt) : [];
+  return { startedAt: identifyStartedAt && new Date(identifyStartedAt).toISOString(), samples, steps: findSteps(samples) };
 }
 
 /** Lokal analyse: største trinn opp etterfulgt av et trinn ned av omtrent samme størrelse. */
@@ -249,7 +250,7 @@ const ANALYSIS_SCHEMA = {
   },
 };
 
-async function aiAnalysis(samples: PowerSample[], start: number, local: IdentifyAnalysis): Promise<IdentifyAnalysis> {
+async function aiAnalysis(samples: PowerSample[], start: number, local: IdentifyAnalysis, hint: string): Promise<IdentifyAnalysis> {
   // Maks ~300 punkter: ta snittet per bøtte
   const bucket = Math.max(1, Math.ceil(samples.length / 300));
   const rows: string[] = [];
@@ -274,7 +275,9 @@ async function aiAnalysis(samples: PowerSample[], start: number, local: Identify
         },
         {
           role: 'user',
-          content: `Målinger (sekunder etter start<TAB>watt):\n${rows.join('\n')}\n\nAutomatisk funne trinn:\n${steps.join('\n') || 'ingen'}`,
+          content: `${hint ? `Brukeren sier apparatet er: «${hint}». Bruk det til å vurdere om effekten er rimelig.
+
+` : ''}Målinger (sekunder etter start<TAB>watt):\n${rows.join('\n')}\n\nAutomatisk funne trinn:\n${steps.join('\n') || 'ingen'}`,
         },
       ],
       text: { format: { type: 'json_schema', name: 'appliance_signature', strict: true, schema: ANALYSIS_SCHEMA } },
@@ -292,7 +295,7 @@ async function aiAnalysis(samples: PowerSample[], start: number, local: Identify
 }
 
 /** Analyser målingene siden start. Identifiseringen avsluttes (sporing gjenopptas). */
-export async function analyzeIdentify(): Promise<{ analysis: IdentifyAnalysis; samples: PowerSample[]; startedAt: string }> {
+export async function analyzeIdentify(hint = ''): Promise<{ analysis: IdentifyAnalysis; samples: PowerSample[]; startedAt: string }> {
   if (!identifyStartedAt) throw new ApplianceError(409, 'Identifisering er ikke startet');
   const start = identifyStartedAt;
   const samples = powerHistory(start);
@@ -301,7 +304,7 @@ export async function analyzeIdentify(): Promise<{ analysis: IdentifyAnalysis; s
   let analysis = local;
   if (openaiConfigured()) {
     try {
-      analysis = await aiAnalysis(samples, start, local);
+      analysis = await aiAnalysis(samples, start, local, hint.trim().slice(0, 100));
     } catch (err) {
       console.error(err);
       analysis = { ...local, explanation: `${local.explanation} (OpenAI feilet – lokal analyse brukt.)` };

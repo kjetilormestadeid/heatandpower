@@ -568,11 +568,25 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .identify input:not([type]) { flex: 1; min-width: 180px; }
 .identify-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
 .identify-steps li.done { color: var(--muted); text-decoration: line-through; }
-.power-curve { width: 100%; height: 80px; display: block; background: var(--bg); border-radius: 8px; }
-div.power-curve { display: flex; align-items: center; justify-content: center; }
-.power-curve polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.identify-steps li.current { font-weight: 600; }
+.identify-tips { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 2px; }
+.identify-name { flex: 1; min-width: 180px; }
+.identify-status { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--bg); border-left: 3px solid var(--accent); }
+.identify-status.wait { border-left-color: var(--muted); }
+.identify-status.ok { border-left-color: var(--ok); }
+.power-curve { display: flex; flex-direction: column; gap: 4px; background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.power-curve.empty { min-height: 120px; align-items: center; justify-content: center; }
+.power-curve .plot { position: relative; height: 120px; margin-top: 14px; }
+.power-curve svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.power-curve polyline { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .power-curve line { stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
-.power-curve .mark-on { stroke: var(--ok); }
-.power-curve .mark-off { stroke: var(--error); }
+.power-curve line.baseline { stroke: var(--muted); stroke-dasharray: 2 4; }
+.power-curve .mark-on { stroke: var(--ok); color: var(--ok); }
+.power-curve .mark-off { stroke: var(--error); color: var(--error); }
+.power-curve .axis { font-size: 0.7rem; color: var(--muted); }
+.power-curve .axis-row { display: flex; justify-content: space-between; }
+.power-curve .baseline-label { position: absolute; right: 0; transform: translateY(-110%); pointer-events: none; }
+.power-curve .mark-label { position: absolute; top: -14px; font-size: 0.72rem; font-weight: 600; transform: translateX(-50%); white-space: nowrap; pointer-events: none; }
+.power-curve .now-dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); }
 .known-appliances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .known-appliances li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

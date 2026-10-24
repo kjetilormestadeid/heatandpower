@@ -27,6 +27,7 @@ import type {
   Appliance,
   PowerSample,
   IdentifyAnalysis,
+  PowerStepRaw,
 } from './types';
 
 export class ApiError extends Error {
@@ -138,10 +139,10 @@ export const api = {
   removeAppliance: (id: string) => request('DELETE', `/api/appliances/${encodeURIComponent(id)}`),
   setApplianceOn: (id: string, on: boolean) => request('PUT', `/api/appliances/${encodeURIComponent(id)}/state`, { on }),
   identifyStart: () => request<{ startedAt: string }>('POST', '/api/appliances/identify/start'),
-  identifySamples: () => request<{ startedAt: string | null; samples: PowerSample[] }>('GET', '/api/appliances/identify'),
+  identifySamples: () => request<{ startedAt: string | null; samples: PowerSample[]; steps: PowerStepRaw[] }>('GET', '/api/appliances/identify'),
   identifyCancel: () => request('POST', '/api/appliances/identify/cancel'),
-  identifyAnalyze: () =>
-    request<{ analysis: IdentifyAnalysis; samples: PowerSample[]; startedAt: string }>('POST', '/api/appliances/identify/analyze'),
+  identifyAnalyze: (hint: string) =>
+    request<{ analysis: IdentifyAnalysis; samples: PowerSample[]; startedAt: string }>('POST', '/api/appliances/identify/analyze', { hint }),
 
   sonosStatus: () => request<{ configured: boolean; connected: boolean }>('GET', '/api/sonos/status'),
   sonosComplete: (url: string) => request('POST', '/api/sonos/complete', { url }),

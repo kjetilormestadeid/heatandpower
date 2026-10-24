@@ -352,6 +352,12 @@ export interface AppliancesResponse {
   identifying: boolean;
 }
 
+/** Trinn funnet i målingene: tidspunkt (ms) og endring i W */
+export interface PowerStepRaw {
+  t: number;
+  delta: number;
+}
+
 export interface PowerSample {
   /** ms siden epoch */
   t: number;
