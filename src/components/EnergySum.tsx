@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { statStart } from '../format';
+import { pollWithBackoff } from '../useServicePoll';
 
 const H = 200;
 const PAD = { top: 14, right: 8, bottom: 22, left: 44 };
@@ -77,11 +78,18 @@ export function EnergySum({ houseId }: { houseId: string }) {
         setError(null);
       }
     }
-    load().catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Kunne ikke hente forbruk'));
-    const t = setInterval(() => document.visibilityState === 'visible' && load().catch(() => {}), 10 * 60_000);
+    // Hvert 10. minutt; feiler det, prøves det oftere til tjenestene svarer igjen
+    const stop = pollWithBackoff(
+      () =>
+        load().then(
+          () => true,
+          (e) => (!cancelled && setError(e instanceof Error ? e.message : 'Kunne ikke hente forbruk'), false),
+        ),
+      10 * 60_000,
+    );
     return () => {
       cancelled = true;
-      clearInterval(t);
+      stop();
     };
   }, [houseId]);
 

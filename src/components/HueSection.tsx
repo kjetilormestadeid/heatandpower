@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { HueGroup, HueLight } from '../types';
 import { Icon } from './Icon';
+import { retryUntilOk } from '../useServicePoll';
 
 const POLL_MS = 60_000;
 
@@ -61,9 +62,20 @@ export function HueSection() {
   }
 
   useEffect(() => {
-    api.hueStatus().then(setStatus, (e) => setError(e.message));
+    let failed = false;
+    const stop = retryUntilOk(() =>
+      api.hueStatus().then(
+        (s) => (setStatus(s), failed && setError(null)),
+        (e) => {
+          failed = true;
+          setError(e.message);
+          throw e;
+        },
+      ),
+    );
     // Rydd ?hue=ok / ?hue_error=… fra adressefeltet etter innlogging
     if (location.search.includes('hue')) history.replaceState(null, '', location.pathname);
+    return stop;
   }, []);
 
   useEffect(() => {

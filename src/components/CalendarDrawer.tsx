@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from '../api';
 import type { CalendarEvent } from '../types';
 import { Icon } from './Icon';
+import { retryUntilOk } from '../useServicePoll';
 
 const DAYS = 7;
 const POLL_MS = 10 * 60_000;
@@ -61,12 +62,15 @@ function startCalendar() {
   if (started) return;
   started = true;
   const load = () => loadCalendar();
-  api.calendarStatus().then((s) => {
-    if (!s.configured) return;
-    setCal({ configured: true });
-    load();
-    window.setInterval(() => document.visibilityState === 'visible' && load(), POLL_MS);
-  }, () => (started = false));
+  // Lever hele appens levetid, så stopp-funksjonen trengs ikke
+  retryUntilOk(() =>
+    api.calendarStatus().then((s) => {
+      if (!s.configured) return;
+      setCal({ configured: true });
+      load();
+      window.setInterval(() => document.visibilityState === 'visible' && load(), POLL_MS);
+    }),
+  );
 }
 
 const subscribe = (l: () => void) => {

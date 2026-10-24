@@ -3,6 +3,7 @@ import { api } from '../api';
 import type { SonosCommand, SonosGroup, SonosOverview } from '../types';
 import { Dimmer } from './HueSection';
 import { Icon } from './Icon';
+import { retryUntilOk } from '../useServicePoll';
 
 const POLL_MS = 60_000; // Sonos: maks 20 000 kall/døgn – serveren holder oversikten i 90 s uansett
 
@@ -17,8 +18,19 @@ export function SonosSection() {
   const load = useCallback(() => api.sonosOverview().then((d) => (setData(d), setError(null)), (e) => setError(e.message)), []);
 
   useEffect(() => {
-    api.sonosStatus().then(setStatus, (e) => setError(e.message));
+    let failed = false;
+    const stop = retryUntilOk(() =>
+      api.sonosStatus().then(
+        (s) => (setStatus(s), failed && setError(null)),
+        (e) => {
+          failed = true;
+          setError(e.message);
+          throw e;
+        },
+      ),
+    );
     if (location.search.includes('sonos')) history.replaceState(null, '', location.pathname);
+    return stop;
   }, []);
 
   useEffect(() => {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import type { StatItem, TibberConsumption } from '../types';
 import { statStart } from '../format';
+import { retryUntilOk } from '../useServicePoll';
 
 const H = 200;
 const PAD = { top: 14, right: 8, bottom: 22, left: 44 };
@@ -51,36 +52,42 @@ export function ConsumptionCompare({ houseId }: { houseId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   // Samme Tibber-hjem som Tibber-seksjonen har valgt
-  useEffect(() => {
-    api.tibberStatus().then(
-      (s) => {
-        if (!s.configured) return setTibberHomeId(null);
-        api.tibberHomes().then(
-          (r) => {
-            const saved = localStorage.getItem('tibber.homeId');
-            setTibberHomeId(r.homes.some((h) => h.id === saved) ? saved : (r.homes[0]?.id ?? null));
-          },
-          (e) => setError(e.message),
-        );
-      },
-      (e) => setError(e.message),
-    );
-  }, []);
+  useEffect(
+    () =>
+      retryUntilOk(async () => {
+        try {
+          const s = await api.tibberStatus();
+          if (!s.configured) return setTibberHomeId(null);
+          const r = await api.tibberHomes();
+          const saved = localStorage.getItem('tibber.homeId');
+          setTibberHomeId(r.homes.some((h) => h.id === saved) ? saved : (r.homes[0]?.id ?? null));
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Fikk ikke kontakt med Tibber');
+          throw e;
+        }
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!tibberHomeId) return;
     setDays(null);
     setError(null);
-    const now = new Date();
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    Promise.all([
-      api.tibberOverview(tibberHomeId, 'HOURLY'),
-      api.houseStatistics(houseId, prev.getFullYear(), prev.getMonth() + 1),
-      api.houseStatistics(houseId, now.getFullYear(), now.getMonth() + 1),
-    ]).then(
-      ([t, a, b]) => setDays(mergeDays(t.daily.nodes, [...a.energyUsage.items, ...b.energyUsage.items])),
-      (e) => setError(e.message),
-    );
+    return retryUntilOk(() => {
+      const now = new Date();
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return Promise.all([
+        api.tibberOverview(tibberHomeId, 'HOURLY'),
+        api.houseStatistics(houseId, prev.getFullYear(), prev.getMonth() + 1),
+        api.houseStatistics(houseId, now.getFullYear(), now.getMonth() + 1),
+      ]).then(
+        ([t, a, b]) => (setDays(mergeDays(t.daily.nodes, [...a.energyUsage.items, ...b.energyUsage.items])), setError(null)),
+        (e) => {
+          setError(e.message);
+          throw e;
+        },
+      );
+    });
   }, [houseId, tibberHomeId]);
 
   if (tibberHomeId === null || (tibberHomeId === undefined && !error)) return null;

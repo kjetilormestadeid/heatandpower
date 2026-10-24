@@ -38,6 +38,24 @@ export function pollWithBackoff(run: () => Promise<boolean>, everyMs: number) {
 }
 
 /**
+ * Kjører `run` én gang, og ved feil på nytt hvert 5. minutt til den lykkes. For hentinger som ellers
+ * bare gjøres ved oppstart (status, oppsett), så flisen ikke blir stående med feil. Gir tilbake en stopp-funksjon.
+ */
+export function retryUntilOk(run: () => Promise<unknown>) {
+  let stop = false;
+  let t: number | undefined;
+  const attempt = () =>
+    run().catch(() => {
+      if (!stop) t = window.setTimeout(attempt, RETRY_MAX_MS);
+    });
+  attempt();
+  return () => {
+    stop = true;
+    window.clearTimeout(t);
+  };
+}
+
+/**
  * Henter data jevnlig og tåler at tjenesten er nede: ved feil beholdes siste data og `down` blir true,
  * så flisene kan vises rolig som «ingen kontakt». Mens den er nede prøves det med økende pause
  * (15 s → 5 min), og når et kall lykkes igjen blir `down` false og vanlig intervall gjelder.

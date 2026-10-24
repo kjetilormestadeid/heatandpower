@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { DecoClient, DecoOverview, Person } from '../types';
 import { Icon } from './Icon';
+import { retryUntilOk } from '../useServicePoll';
 
 const POLL_MS = 60_000;
 
@@ -45,9 +46,19 @@ export function PresenceSection() {
 
   const load = useCallback(() => api.decoOverview().then((d) => (setData(d), setError(null)), (e) => setError(e.message)), []);
 
-  useEffect(() => {
-    api.decoStatus().then((s) => setConfigured(s.configured), (e) => setError(e.message));
-  }, []);
+  useEffect(
+    () =>
+      retryUntilOk(() =>
+        api.decoStatus().then(
+          (s) => (setConfigured(s.configured), setError(null)),
+          (e) => {
+            setError(e.message);
+            throw e;
+          },
+        ),
+      ),
+    [],
+  );
 
   useEffect(() => {
     if (!configured) return;

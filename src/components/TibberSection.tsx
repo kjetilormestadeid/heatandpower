@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import type { PriceLevel, TibberHomeSummary, TibberOverview, TibberPrice } from '../types';
 import { BarChart, type Bar } from './BarChart';
+import { retryUntilOk } from '../useServicePoll';
 
 const LEVEL_LABEL: Record<PriceLevel, string> = {
   VERY_CHEAP: 'Veldig billig',
@@ -31,22 +32,24 @@ export function TibberSection() {
   const [error, setError] = useState<string | null>(null);
   const [windowHours, setWindowHours] = useState(3);
 
-  useEffect(() => {
-    api.tibberStatus().then(
-      (s) => {
-        setConfigured(s.configured);
-        if (s.configured)
-          api.tibberHomes().then(
-            (r) => {
-              setHomes(r.homes);
-              setHomeId((cur) => (cur && r.homes.some((h) => h.id === cur) ? cur : (r.homes[0]?.id ?? null)));
-            },
-            (e) => setError(e.message),
-          );
-      },
-      (e) => setError(e.message),
-    );
-  }, []);
+  useEffect(
+    () =>
+      retryUntilOk(async () => {
+        try {
+          const s = await api.tibberStatus();
+          setConfigured(s.configured);
+          if (!s.configured) return;
+          const r = await api.tibberHomes();
+          setHomes(r.homes);
+          setHomeId((cur) => (cur && r.homes.some((h) => h.id === cur) ? cur : (r.homes[0]?.id ?? null)));
+          setError(null);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Fikk ikke kontakt med Tibber');
+          throw e;
+        }
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!homeId) return;
