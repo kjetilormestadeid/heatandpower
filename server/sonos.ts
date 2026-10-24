@@ -44,7 +44,11 @@ async function save(s: Stored | null) {
 }
 
 export const sonosConnected = async () => Boolean((await load())?.refreshToken);
-export const sonosDisconnect = () => save(null);
+export const sonosDisconnect = () => {
+  householdId = null;
+  cache = null;
+  return save(null);
+};
 
 // --- OAuth ------------------------------------------------------------------
 
@@ -121,7 +125,11 @@ async function accessToken() {
 
 // --- Control API -------------------------------------------------------------
 
+// Sonos tillater 20 000 kall per døgn per bruker. Brukes kvoten opp, venter vi en stund før vi spør igjen.
+let blockedUntil = 0;
+
 async function api<T>(method: 'GET' | 'POST', p: string, body?: unknown, retried = false): Promise<T> {
+  if (Date.now() < blockedUntil) throw new SonosError(429, 'Sonos-kvoten (20 000 kall/døgn) er brukt opp – prøver igjen om litt');
   const res = await fetch(CONTROL + p, {
     method,
     headers: { authorization: `Bearer ${await accessToken()}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
@@ -134,6 +142,7 @@ async function api<T>(method: 'GET' | 'POST', p: string, body?: unknown, retried
   }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+  if (res.status === 429) blockedUntil = Date.now() + 15 * 60_000;
   if (!res.ok) throw new SonosError(res.status === 429 ? 429 : 502, data?.reason ?? data?.errorCode ?? `Sonos ${res.status}`);
   return data as T;
 }
@@ -162,23 +171,56 @@ const STATE: Record<string, SonosGroup['state']> = {
   PLAYBACK_STATE_BUFFERING: 'buffering',
 };
 
+// Kallbudsjett: oversikten koster 1 + ett kall per gruppe (+ metadata for de som ikke er stille),
+// så den holdes i 90 s uansett hvor mange skjermer som spør. Rett etter en kommando hentes det
+// tettere en kort stund, så ny status kommer fort.
+const OVERVIEW_TTL = 90_000;
+const BURST_TTL = 3_000;
 let cache: { at: number; data: SonosOverview } | null = null;
+let inflight: Promise<SonosOverview> | null = null;
+let burstUntil = 0;
+let householdId: string | null = null;
 let favCache: { at: number; householdId: string; items: SonosOverview['favorites'] } | null = null;
+/** Volum endres sjelden utenfra – hentes på nytt hvert 10. minutt, eller med en gang vi selv endrer det */
+const volCache = new Map<string, { at: number; volume: number; muted: boolean }>();
 
-export async function sonosOverview(): Promise<SonosOverview> {
-  if (cache && Date.now() - cache.at < 10_000) return cache.data;
-  const { households } = await api<{ households: { id: string }[] }>('GET', '/households');
-  const hh = households[0]?.id;
+function changed() {
+  cache = null;
+  burstUntil = Date.now() + 30_000;
+}
+
+export function sonosOverview(): Promise<SonosOverview> {
+  const ttl = Date.now() < burstUntil ? BURST_TTL : OVERVIEW_TTL;
+  if (cache && Date.now() - cache.at < ttl) return Promise.resolve(cache.data);
+  inflight ??= fetchOverview().finally(() => (inflight = null));
+  return inflight;
+}
+
+async function fetchOverview(): Promise<SonosOverview> {
+  if (!householdId) {
+    const { households } = await api<{ households: { id: string }[] }>('GET', '/households');
+    householdId = households[0]?.id ?? null;
+  }
+  const hh = householdId;
   if (!hh) throw new SonosError(404, 'Fant ingen Sonos-husstand på kontoen');
   const g = await api<{ groups: { id: string; name: string; playerIds: string[] }[]; players: { id: string; name: string }[] }>('GET', `/households/${hh}/groups`);
   const playerName = new Map(g.players.map((p) => [p.id, p.name]));
 
   const groups = await Promise.all(
     g.groups.map(async (gr): Promise<SonosGroup> => {
-      const [pb, meta, vol] = await Promise.all([
-        api<{ playbackState: string }>('GET', `/groups/${gr.id}/playback`).catch(() => null),
-        api<{ container?: { name?: string }; currentItem?: { track?: { name?: string; artist?: { name?: string }; imageUrl?: string } } }>('GET', `/groups/${gr.id}/playbackMetadata`).catch(() => null),
-        api<{ volume: number; muted: boolean }>('GET', `/groups/${gr.id}/groupVolume`).catch(() => null),
+      const pb = await api<{ playbackState: string }>('GET', `/groups/${gr.id}/playback`).catch(() => null);
+      const idle = (pb?.playbackState ?? 'PLAYBACK_STATE_IDLE') === 'PLAYBACK_STATE_IDLE';
+      const cachedVol = volCache.get(gr.id);
+      const [meta, vol] = await Promise.all([
+        idle
+          ? null
+          : api<{ container?: { name?: string }; currentItem?: { track?: { name?: string; artist?: { name?: string }; imageUrl?: string } } }>('GET', `/groups/${gr.id}/playbackMetadata`).catch(() => null),
+        cachedVol && Date.now() - cachedVol.at < 10 * 60_000
+          ? cachedVol
+          : api<{ volume: number; muted: boolean }>('GET', `/groups/${gr.id}/groupVolume`).then(
+              (v) => (volCache.set(gr.id, { at: Date.now(), ...v }), v),
+              () => null,
+            ),
       ]);
       const t = meta?.currentItem?.track;
       return {
@@ -210,17 +252,19 @@ export const isSonosCommand = (c: string): c is SonosCommand => c in COMMANDS;
 
 export async function sonosCommand(groupId: string, cmd: SonosCommand) {
   await api('POST', `/groups/${encodeURIComponent(groupId)}/playback/${COMMANDS[cmd]}`);
-  cache = null;
+  changed();
 }
 
 export async function sonosVolume(groupId: string, volume: number) {
-  await api('POST', `/groups/${encodeURIComponent(groupId)}/groupVolume`, { volume: Math.min(100, Math.max(0, Math.round(volume))) });
-  cache = null;
+  const v = Math.min(100, Math.max(0, Math.round(volume)));
+  await api('POST', `/groups/${encodeURIComponent(groupId)}/groupVolume`, { volume: v });
+  volCache.set(groupId, { at: Date.now(), volume: v, muted: false });
+  changed();
 }
 
 export async function sonosFavorite(groupId: string, favoriteId: string) {
   await api('POST', `/groups/${encodeURIComponent(groupId)}/favorites`, { favoriteId, playOnCompletion: true, action: 'REPLACE' });
-  cache = null;
+  changed();
 }
 
 /** Spill en favoritt på én høyttaler alene: er den gruppert med andre, tas den ut i en egen gruppe først. */
@@ -240,5 +284,5 @@ export async function sonosPlayerFavorite(playerId: string, favoriteId: string) 
 export async function sonosPauseAll() {
   const o = await sonosOverview();
   await Promise.all(o.groups.filter((g) => g.state === 'playing' || g.state === 'buffering').map((g) => api('POST', `/groups/${g.id}/playback/pause`).catch(() => null)));
-  cache = null;
+  changed();
 }

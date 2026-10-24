@@ -245,7 +245,7 @@ function QuickSonos() {
   const volTimer = useRef<number | undefined>(undefined);
   const { data, down, burst } = useServicePoll<SonosOverview>(
     async () => ((await api.sonosStatus()).connected ? api.sonosOverview() : OFF),
-    30_000,
+    60_000, // Sonos: maks 20 000 kall/døgn,
     [],
   );
   const { expect, shown, pending } = useExpected<boolean>((id) => {

@@ -4,7 +4,7 @@ import type { SonosCommand, SonosGroup, SonosOverview } from '../types';
 import { Dimmer } from './HueSection';
 import { Icon } from './Icon';
 
-const POLL_MS = 15_000;
+const POLL_MS = 60_000; // Sonos: maks 20 000 kall/døgn – serveren holder oversikten i 90 s uansett
 
 /** Sonos via Control API: koble til én gang, deretter rom/grupper med avspilling, volum og favoritter. */
 export function SonosSection() {
