@@ -11,6 +11,7 @@ import { humidityRules, saveHumidityRule, startAutomations } from './automation.
 import { DecoError, decoConfigured, decoOverview, decoSetOwner } from './deco.ts';
 import { EaseeError, easeeCharger, easeeChargers, easeeCommand, easeeConfigured, isEaseeCommand } from './easee.ts';
 import { CalendarError, calendarConfigured, calendarEvents } from './calendar.ts';
+import { ApplianceError, addAppliance, analyzeIdentify, applianceStates, cancelIdentify, identifySamples, removeAppliance, setApplianceOn, startApplianceTracking, startIdentify } from './appliances.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const COOKIE = 'mill_sid';
@@ -325,6 +326,68 @@ app.put('/api/deco/owners/:mac', requireSession, async (req, res) => {
   }
 });
 
+// Apparatgjenkjenning fra Tibber Pulse (identifiser-modus med OpenAI-analyse)
+function sendApplianceError(res: Response, err: unknown) {
+  if (err instanceof ApplianceError || err instanceof TibberError) res.status(err.status).json({ error: { message: err.message } });
+  else sendError(res, err);
+}
+
+app.get('/api/appliances', requireSession, async (_req, res) => {
+  res.json(await applianceStates());
+});
+
+app.post('/api/appliances', requireSession, async (req, res) => {
+  const { name, watts, source } = req.body ?? {};
+  if (typeof name !== 'string' || !name.trim() || typeof watts !== 'number' || !(watts > 0) || watts > 50_000) {
+    res.status(400).json({ error: { message: 'Navn og effekt (W) må fylles ut' } });
+    return;
+  }
+  res.json({ appliance: await addAppliance(name, watts, source === 'ai' || source === 'local' ? source : 'manual') });
+});
+
+app.delete('/api/appliances/:id', requireSession, async (req, res) => {
+  await removeAppliance(String(req.params.id));
+  res.json({ ok: true });
+});
+
+app.put('/api/appliances/:id/state', requireSession, async (req, res) => {
+  if (typeof req.body?.on !== 'boolean') {
+    res.status(400).json({ error: { message: 'on må være true/false' } });
+    return;
+  }
+  try {
+    await setApplianceOn(String(req.params.id), req.body.on);
+    res.json({ ok: true });
+  } catch (err) {
+    sendApplianceError(res, err);
+  }
+});
+
+app.post('/api/appliances/identify/start', requireSession, (_req, res) => {
+  try {
+    res.json(startIdentify());
+  } catch (err) {
+    sendApplianceError(res, err);
+  }
+});
+
+app.get('/api/appliances/identify', requireSession, (_req, res) => {
+  res.json(identifySamples());
+});
+
+app.post('/api/appliances/identify/cancel', requireSession, (_req, res) => {
+  cancelIdentify();
+  res.json({ ok: true });
+});
+
+app.post('/api/appliances/identify/analyze', requireSession, async (_req, res) => {
+  try {
+    res.json(await analyzeIdentify());
+  } catch (err) {
+    sendApplianceError(res, err);
+  }
+});
+
 // Automasjoner: fuktstyring av stikkontakter (f.eks. avfukter) – kjører i backend.
 app.get('/api/automations/humidity', requireSession, async (_req, res) => {
   res.json({ rules: await humidityRules() });
@@ -431,4 +494,5 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => sen
 
 await loadSessions();
 startAutomations();
+void startApplianceTracking();
 app.listen(PORT, () => console.log(`Mill-backend kjører på http://localhost:${PORT}`));

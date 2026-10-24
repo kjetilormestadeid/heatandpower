@@ -23,6 +23,10 @@ import type {
   SonosOverview,
   MillNetworkDiagnostics,
   CalendarEvent,
+  AppliancesResponse,
+  Appliance,
+  PowerSample,
+  IdentifyAnalysis,
 } from './types';
 
 export class ApiError extends Error {
@@ -127,6 +131,17 @@ export const api = {
   humidityRules: () => request<{ rules: HumidityRule[] }>('GET', '/api/automations/humidity'),
   saveHumidityRule: (rule: Omit<HumidityRule, 'last'>) =>
     request<{ rule: HumidityRule }>('PUT', `/api/automations/humidity/${encodeURIComponent(rule.deviceId)}`, rule),
+
+  appliances: () => request<AppliancesResponse>('GET', '/api/appliances'),
+  addAppliance: (a: { name: string; watts: number; source: Appliance['source'] }) =>
+    request<{ appliance: Appliance }>('POST', '/api/appliances', a),
+  removeAppliance: (id: string) => request('DELETE', `/api/appliances/${encodeURIComponent(id)}`),
+  setApplianceOn: (id: string, on: boolean) => request('PUT', `/api/appliances/${encodeURIComponent(id)}/state`, { on }),
+  identifyStart: () => request<{ startedAt: string }>('POST', '/api/appliances/identify/start'),
+  identifySamples: () => request<{ startedAt: string | null; samples: PowerSample[] }>('GET', '/api/appliances/identify'),
+  identifyCancel: () => request('POST', '/api/appliances/identify/cancel'),
+  identifyAnalyze: () =>
+    request<{ analysis: IdentifyAnalysis; samples: PowerSample[]; startedAt: string }>('POST', '/api/appliances/identify/analyze'),
 
   sonosStatus: () => request<{ configured: boolean; connected: boolean }>('GET', '/api/sonos/status'),
   sonosComplete: (url: string) => request('POST', '/api/sonos/complete', { url }),

@@ -324,3 +324,46 @@ export interface CalendarEvent {
   location: string | null;
   calendar: string | null;
 }
+
+// --- Apparatgjenkjenning (Tibber Pulse) ---
+
+export interface Appliance {
+  id: string;
+  name: string;
+  /** Effekt når den står på (W) */
+  watts: number;
+  createdAt: string;
+  source: 'ai' | 'local' | 'manual';
+  on: boolean;
+  /** Når tilstanden sist endret seg (ISO), null = ukjent */
+  since: string | null;
+}
+
+export interface PowerStep {
+  t: number;
+  delta: number;
+  match: string | null;
+}
+
+export interface AppliancesResponse {
+  appliances: Appliance[];
+  events: PowerStep[];
+  aiConfigured: boolean;
+  identifying: boolean;
+}
+
+export interface PowerSample {
+  /** ms siden epoch */
+  t: number;
+  w: number;
+}
+
+export interface IdentifyAnalysis {
+  found: boolean;
+  watts: number | null;
+  onAtSec: number | null;
+  offAtSec: number | null;
+  confidence: 'høy' | 'middels' | 'lav';
+  explanation: string;
+  source: 'ai' | 'local';
+}

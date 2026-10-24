@@ -90,7 +90,34 @@ const live: {
   error: string | null;
   retry: ReturnType<typeof setTimeout> | null;
   backoff: number;
-} = { data: null, ws: null, lastRequest: 0, error: null, retry: null, backoff: 5_000 };
+  /** Hold tilkoblingen åpen selv om ingen spør (gjenkjenning av apparater) */
+  keepAlive: boolean;
+} = { data: null, ws: null, lastRequest: 0, error: null, retry: null, backoff: 5_000, keepAlive: false };
+
+const wanted = () => live.keepAlive || Date.now() - live.lastRequest < IDLE_MS;
+
+// Siste målinger (W) for analyse av trinn i forbruket
+const HISTORY_MS = 30 * 60_000;
+export interface PowerSample {
+  /** ms siden epoch */
+  t: number;
+  w: number;
+}
+const history: PowerSample[] = [];
+const listeners = new Set<(s: PowerSample) => void>();
+
+/** Målinger fra og med `since` (ms), eldste først. */
+export const powerHistory = (since = 0) => history.filter((s) => s.t >= since);
+export function onPowerSample(fn: (s: PowerSample) => void) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+/** Slå vedvarende tilkobling av/på. Kobler til med en gang når den slås på. */
+export function tibberKeepAlive(on: boolean) {
+  live.keepAlive = on;
+  if (on && tibberConfigured() && !live.ws && !live.retry) void connectLive();
+}
 
 async function pulseHome() {
   const d = await gql<{ viewer: { websocketSubscriptionUrl: string; homes: { id: string; features: { realTimeConsumptionEnabled: boolean | null } | null }[] } }>(
@@ -117,7 +144,11 @@ async function connectLive() {
         live.data = m.payload.data.liveMeasurement;
         live.error = null;
         live.backoff = 5_000;
-        if (Date.now() - live.lastRequest > IDLE_MS) ws.close();
+        const sample = { t: new Date(live.data!.timestamp).getTime(), w: live.data!.power };
+        history.push(sample);
+        while (history.length && history[0].t < sample.t - HISTORY_MS) history.shift();
+        for (const fn of listeners) fn(sample);
+        if (!wanted()) ws.close();
       } else if (m.type === 'error' || m.type === 'connection_error') {
         live.error = 'Tibber avviste sanntidsabonnementet';
       }
@@ -125,7 +156,7 @@ async function connectLive() {
     ws.onclose = () => {
       live.ws = null;
       // Koble til igjen bare hvis noen fortsatt følger med
-      if (Date.now() - live.lastRequest < IDLE_MS) scheduleReconnect();
+      if (wanted()) scheduleReconnect();
     };
     ws.onerror = () => {
       live.error = 'Mistet forbindelsen til Tibber Pulse';

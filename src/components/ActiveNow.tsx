@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { Device, Room, TibberLive } from '../types';
+import type { AppliancesResponse, Device, Room, TibberLive } from '../types';
 import { hueWatts } from './HueSection';
+import { IdentifyAppliance } from './IdentifyAppliance';
 
 export interface ActiveDevice {
   id: string;
@@ -43,14 +44,17 @@ export function ActiveNow({ houseId, rooms, refreshKey }: { houseId: string; roo
   const [devices, setDevices] = useState<ActiveDevice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [house, setHouse] = useState<TibberLive | null>(null);
+  const [appliances, setAppliances] = useState<AppliancesResponse | null>(null);
+  const [identifyOpen, setIdentifyOpen] = useState(false);
+  const loadAppliances = useCallback(() => api.appliances().then(setAppliances, () => {}), []);
 
-  // Tibber Pulse: hele husets forbruk, oppdateres hvert 10. sekund mens fanen er synlig
+  // Tibber Pulse: hele husets forbruk og gjenkjente apparater, oppdateres hvert 10. sekund mens fanen er synlig
   useEffect(() => {
     let stop = false;
     const poll = () =>
       document.visibilityState === 'visible' &&
       api.tibberStatus()
-        .then((s) => (s.configured ? api.tibberLive() : { live: null, error: null }))
+        .then((s) => (s.configured ? Promise.all([api.tibberLive(), loadAppliances()]).then(([l]) => l) : { live: null, error: null }))
         .then((r) => !stop && setHouse(r.live), () => {});
     poll();
     const t = setInterval(poll, 10_000);
@@ -58,7 +62,7 @@ export function ActiveNow({ houseId, rooms, refreshKey }: { houseId: string; roo
       stop = true;
       clearInterval(t);
     };
-  }, []);
+  }, [loadAppliances]);
 
   // Rommene lastes på nytt hvert minutt (nytt array hver gang) – hent bare enhetene på nytt når
   // settet av rom endrer seg, ved egne endringer (refreshKey) eller på eget, roligere intervall.
@@ -121,10 +125,27 @@ export function ActiveNow({ houseId, rooms, refreshKey }: { houseId: string; roo
           <p className="muted small">Henter enheter…</p>
         </>
       )}
-      {devices && <ActiveNowView devices={devices} house={house} />}
+      {devices && (
+        <ActiveNowView
+          devices={[...devices, ...(appliances?.appliances ?? []).map(applianceToActive)]}
+          house={house}
+          actions={house && (
+            <button className={identifyOpen ? 'primary' : ''} onClick={() => setIdentifyOpen((o) => !o)}>
+              {identifyOpen ? 'Lukk identifisering' : 'Identifiser apparat'}
+            </button>
+          )}
+        />
+      )}
+      {identifyOpen && <IdentifyAppliance data={appliances} onChange={loadAppliances} />}
     </section>
   );
 }
+
+/** Apparat gjenkjent fra trinn i Tibber Pulse-målingen – effekten er den som ble målt ved identifisering. */
+const applianceToActive = (a: AppliancesResponse['appliances'][number]): ActiveDevice => ({
+  id: `appliance-${a.id}`, name: a.name, room: 'Gjenkjent fra Pulse', type: 'Apparat',
+  isConnected: true, isEnabled: a.on, power: a.on ? a.watts : 0, estimated: true,
+});
 
 const fmtW = (w: number) => (w >= 1000 ? `${(w / 1000).toLocaleString('nb-NO', { maximumFractionDigits: 2 })} kW` : `${w} W`);
 
@@ -132,8 +153,11 @@ const fmtW = (w: number) => (w >= 1000 ? `${(w / 1000).toLocaleString('nb-NO', {
 export function ActiveNowView({
   devices,
   house,
+  actions,
 }: {
   devices: ActiveDevice[];
+  /** Knapper i overskriften (valgfritt) */
+  actions?: ReactNode;
   /** Hele husets forbruk fra Tibber Pulse (valgfritt) */
   house?: Pick<TibberLive, 'power' | 'accumulatedConsumption' | 'accumulatedCost' | 'maxPower'> | null;
 }) {
@@ -154,6 +178,7 @@ export function ActiveNowView({
         <span className={`pill ${drawing.length ? 'on' : ''}`}>
           {drawing.length ? `${drawing.length} trekker strøm` : 'Ingenting trekker strøm'}
         </span>
+        {actions}
       </div>
 
       {house && <HouseNow house={house} known={total} />}
