@@ -196,26 +196,18 @@ function QuickLights() {
 
   return (
     <>
-      {roomGroups.map((g) => {
-        const on = shown(g.id, g.on);
-        return (
-          <button
-            key={g.id}
-            className={`quick-tile quick-light ${on ? 'on' : ''} ${pending(g.id) ? 'pending' : ''} ${down ? 'stale' : ''}`}
-            aria-pressed={on}
-            disabled={down || busyId === g.id}
-            onClick={() => toggle(g, !on)}
-          >
-            {down && <Stale />}
-            <span className="quick-head">
-              <Icon name="bulb" />
-              <span className="quick-name">{g.name}</span>
-            </span>
-            <strong className="quick-value">{on ? 'På' : 'Av'}</strong>
-            <span className="small">{pending(g.id) ? (on ? 'Slår på …' : 'Slår av …') : on && g.brightness != null ? `${g.brightness} %` : 'Lys'}</span>
-          </button>
-        );
-      })}
+      {roomGroups.map((g) => (
+        <LightTile
+          key={g.id}
+          group={g}
+          on={shown(g.id, g.on)}
+          pending={pending(g.id)}
+          stale={down}
+          busy={busyId === g.id}
+          onToggle={(on) => toggle(g, on)}
+          onDimmed={() => (expect(g.id, true), burst())}
+        />
+      ))}
       {home && (
         <button
           className={`quick-tile quick-all ${down ? 'stale' : ''}`}
@@ -231,6 +223,76 @@ function QuickLights() {
         </button>
       )}
     </>
+  );
+}
+
+const DIM_STEP = 10;
+
+/** Ett Hue-rom: trykk slår av/på, −/+ dimmer i steg på 10 % (og slår på). */
+function LightTile({ group: g, on, pending, stale, busy, onToggle, onDimmed }: {
+  group: HueGroup;
+  on: boolean;
+  pending: boolean;
+  stale: boolean;
+  busy: boolean;
+  onToggle: (on: boolean) => void;
+  onDimmed: () => void;
+}) {
+  const [level, setLevel] = useState<number | null>(g.brightness);
+  const [error, setError] = useState(false);
+  const dimming = useRef(false);
+  const timer = useRef<number | undefined>(undefined);
+
+  // Synk fra Hue når vi ikke har ulagrede endringer
+  useEffect(() => {
+    if (!dimming.current) setLevel(g.brightness);
+  }, [g.brightness]);
+
+  const canDim = !stale && g.brightness != null;
+
+  function adjust(delta: number) {
+    const from = on ? (level ?? 100) : 0;
+    const next = Math.min(100, Math.max(1, Math.round((from + delta) / DIM_STEP) * DIM_STEP));
+    setLevel(next);
+    dimming.current = true;
+    window.clearTimeout(timer.current);
+    // Vent til man har sluttet å trykke, så sendes bare siste nivå
+    timer.current = window.setTimeout(async () => {
+      try {
+        await api.hueDimGroup(g.id, next);
+        setError(false);
+      } catch {
+        setError(true);
+      } finally {
+        dimming.current = false;
+        onDimmed();
+      }
+    }, 600);
+  }
+
+  const lit = on || dimming.current;
+  return (
+    <div className={`quick-tile quick-light ${lit ? 'on' : ''} ${pending ? 'pending' : ''} ${stale ? 'stale' : ''}`}>
+      {stale && <Stale />}
+      <button className="quick-light-toggle" aria-pressed={on} disabled={stale || busy} onClick={() => onToggle(!on)}>
+        <span className="quick-head">
+          <Icon name="bulb" />
+          <span className="quick-name">{g.name}</span>
+        </span>
+        <strong className="quick-value">{lit ? (level != null ? `${level} %` : 'På') : 'Av'}</strong>
+        <span className="small">{pending ? (on ? 'Slår på …' : 'Slår av …') : error ? 'Ikke lagret – prøv igjen' : 'Lys'}</span>
+      </button>
+      {canDim && (
+        <div className="quick-heat-btns">
+          <button aria-label={`Dimm ned lyset i ${g.name}`} disabled={!lit || (level ?? 100) <= 1} onClick={() => adjust(-DIM_STEP)}>
+            <Icon name="minus" />
+          </button>
+          <button aria-label={`Skru opp lyset i ${g.name}`} disabled={lit && (level ?? 100) >= 100} onClick={() => adjust(DIM_STEP)}>
+            <Icon name="plus" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
