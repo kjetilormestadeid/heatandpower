@@ -75,7 +75,7 @@ export function SonosSection() {
         <h2>Musikk (Sonos)</h2>
         <div className="spacer" />
         {status?.connected && (
-          <button className="link small" onClick={() => api.sonosLogout().then(() => (setStatus({ ...status, connected: false }), setData(null)))}>
+          <button className="link small disconnect" onClick={() => api.sonosLogout().then(() => (setStatus({ ...status, connected: false }), setData(null)))}>
             Koble fra
           </button>
         )}

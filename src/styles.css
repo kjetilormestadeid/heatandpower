@@ -69,6 +69,7 @@ button.link { border: none; background: none; padding: 4px 0; color: var(--accen
 
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
+button.link.disconnect { font-size: 0.72rem; color: var(--muted); align-self: center; }
 .error { color: var(--error); margin: 0; }
 .error.banner { padding: 10px 14px; border: 1px solid var(--error); border-radius: var(--radius); margin-bottom: 16px; }
 .spacer { flex: 1; }
@@ -417,9 +418,11 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .quick-device.on .quick-head { color: var(--accent); }
 .quick-device.offline { opacity: 0.6; }
 .quick-ev.charging .quick-head { color: var(--series-3); }
-.quick-sonos.on { border-color: var(--accent); }
-.quick-sonos.on .quick-head { color: var(--accent); }
-.quick-sonos .quick-value { font-size: 1.1rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.quick-sonos { grid-column: span 2; }
+.quick-sonos { background: color-mix(in srgb, var(--ok) 7%, var(--bg)); }
+.quick-sonos.on { background: color-mix(in srgb, var(--ok) 14%, var(--bg)); border-color: var(--ok); }
+.quick-sonos.on .quick-head { color: var(--ok); }
+.quick-sonos .quick-value { font-size: 1.3rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .quick-sonos-ctl { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 6px; margin-top: auto; padding-top: 6px; }
 .quick-sonos .quick-heat-btns { margin-top: 0; }
 .quick-sonos-ctl button { min-height: 40px; padding: 0; display: grid; place-items: center; touch-action: manipulation; }
@@ -515,21 +518,22 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .quick-heat.heating, .quick-light.on, .quick-ev.charging { --glow: var(--heat); }
 .quick-light.on { --glow: var(--lit); }
 .quick-ev.charging { --glow: var(--series-3); }
+.quick-sonos.on { --glow: var(--ok); }
 /* Gløden ligger i et eget lag og animeres med opacity, så nettbrettet slipper å tegne skyggen på nytt hele tiden */
-.quick-heat.heating::after, .quick-light.on::after, .quick-ev.charging::after {
+.quick-heat.heating::after, .quick-light.on::after, .quick-ev.charging::after, .quick-sonos.on::after {
   content: ''; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
   box-shadow: 0 0 0 2px var(--glow), 0 0 18px 2px color-mix(in srgb, var(--glow) 55%, transparent);
   opacity: 0; animation: tile-glow 2.4s ease-in-out infinite;
 }
-.quick-heat.heating .quick-head .icon-svg, .quick-light.on .quick-head .icon-svg, .quick-ev.charging .quick-head .icon-svg {
+.quick-heat.heating .quick-head .icon-svg, .quick-light.on .quick-head .icon-svg, .quick-ev.charging .quick-head .icon-svg, .quick-sonos.on .quick-head .icon-svg {
   animation: tile-icon 2.4s ease-in-out infinite;
 }
 .quick-heat.heating { background: color-mix(in srgb, var(--heat-bg) 70%, var(--bg)); }
 @keyframes tile-glow { 0%, 100% { opacity: 0.15; } 50% { opacity: 1; } }
 @keyframes tile-icon { 0%, 100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.2); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .quick-heat.heating::after, .quick-light.on::after, .quick-ev.charging::after { animation: none; opacity: 0.7; }
-  .quick-heat.heating .quick-head .icon-svg, .quick-light.on .quick-head .icon-svg, .quick-ev.charging .quick-head .icon-svg { animation: none; }
+  .quick-heat.heating::after, .quick-light.on::after, .quick-ev.charging::after, .quick-sonos.on::after { animation: none; opacity: 0.7; }
+  .quick-heat.heating .quick-head .icon-svg, .quick-light.on .quick-head .icon-svg, .quick-ev.charging .quick-head .icon-svg, .quick-sonos.on .quick-head .icon-svg { animation: none; }
 }
 
 /* --- fliser der tjenesten ikke svarer: sist kjente verdier, dempet, uten puls --- */
