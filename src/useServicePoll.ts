@@ -12,6 +12,20 @@ export const BURST_MS = [2_000, 3_000, 5_000, 10_000];
 export const retryDelay = (failures: number) => Math.min(RETRY_FIRST_MS * 2 ** (failures - 1), RETRY_MAX_MS);
 
 /**
+ * Kaller `fn` når skjermen våkner (fanen blir synlig) eller nettet kommer tilbake. Etter dvale har
+ * hentingene som regel feilet og ventet seg opp til 5 min pause – da skal vi ikke vente på timeren.
+ */
+function onWake(fn: () => void) {
+  const vis = () => document.visibilityState === 'visible' && fn();
+  document.addEventListener('visibilitychange', vis);
+  window.addEventListener('online', fn);
+  return () => {
+    document.removeEventListener('visibilitychange', vis);
+    window.removeEventListener('online', fn);
+  };
+}
+
+/**
  * Kjører `run` nå og så hvert `everyMs` mens fanen er synlig. Returnerer `run` false (feilet),
  * trappes pausen ned som i useServicePoll til den lykkes igjen. Gir tilbake en stopp-funksjon.
  */
@@ -20,19 +34,30 @@ export function pollWithBackoff(run: () => Promise<boolean>, everyMs: number) {
   let t: number | undefined;
   let failures = 0;
   let first = true;
-  const schedule = () => (t = window.setTimeout(tick, failures ? retryDelay(failures) : everyMs));
+  let running = false;
+  let lastOk = 0;
+  const schedule = () => {
+    window.clearTimeout(t);
+    t = window.setTimeout(tick, failures ? retryDelay(failures) : everyMs);
+  };
   async function tick() {
+    if (running) return;
     if (first || document.visibilityState === 'visible') {
       first = false;
+      running = true;
       const ok = await run().catch(() => false);
+      running = false;
       if (stop) return;
       failures = ok ? 0 : failures + 1;
+      if (ok) lastOk = Date.now();
     }
     schedule();
   }
   tick();
+  const unwake = onWake(() => (failures || Date.now() - lastOk >= everyMs) && tick());
   return () => {
     stop = true;
+    unwake();
     window.clearTimeout(t);
   };
 }
@@ -76,6 +101,8 @@ export function useServicePoll<T>(fetcher: (prev: T | null) => Promise<T | typeo
     let t: number | undefined;
     let failures = 0;
     let burst: number[] = [];
+    let running = false;
+    let lastOk = 0;
     const schedule = (ms: number) => {
       window.clearTimeout(t);
       t = window.setTimeout(run, burst.length ? burst.shift()! : ms);
@@ -85,11 +112,14 @@ export function useServicePoll<T>(fetcher: (prev: T | null) => Promise<T | typeo
       schedule(0);
     };
     async function run() {
+      if (running) return;
       if (document.visibilityState !== 'visible') return void schedule(failures ? retryDelay(failures) : everyMs);
+      running = true;
       try {
         const r = await fetchRef.current(dataRef.current);
         if (stop) return;
         failures = 0;
+        lastOk = Date.now();
         setDown(false);
         if (r === OFF) return void setData(null);
         setData(r);
@@ -99,11 +129,15 @@ export function useServicePoll<T>(fetcher: (prev: T | null) => Promise<T | typeo
         failures++;
         setDown(true);
         schedule(retryDelay(failures));
+      } finally {
+        running = false;
       }
     }
     run();
+    const unwake = onWake(() => (failures || Date.now() - lastOk >= everyMs) && run());
     return () => {
       stop = true;
+      unwake();
       window.clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

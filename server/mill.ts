@@ -102,6 +102,8 @@ async function call(method: string, urlPath: string, token: string | undefined, 
       ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    // Et kall som henger blokkerer alle skjermer (de venter på samme lesing) – gi heller opp og prøv igjen
+    signal: AbortSignal.timeout(20_000),
   });
   const text = await res.text();
   let data: unknown = null;
@@ -159,6 +161,8 @@ async function refresh(sid: string) {
       if (!s?.refreshToken) throw new MillError(401, { error: { type: 'NoRefreshToken', message: 'Logg inn på nytt' } });
       const { status, data } = await call('POST', '/customer/auth/refresh', s.refreshToken);
       if (status !== 200) {
+        // Bare et avvist token betyr at økten er borte – forbigående feil hos Mill (5xx/429) skal ikke logge ut
+        if (status >= 500 || status === 429) throw new MillError(502, data);
         sessions.delete(sid);
         persist();
         throw new MillError(401, data);

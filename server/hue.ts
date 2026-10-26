@@ -7,6 +7,8 @@ import path from 'node:path';
 
 const HUE = 'https://api.meethue.com';
 const STORE = path.resolve('data/hue.json');
+// Et kall som henger blokkerer alle skjermer (de venter på samme lesing) – gi heller opp og prøv igjen
+const TIMEOUT_MS = 20_000;
 
 export class HueError extends Error {
   constructor(
@@ -73,6 +75,7 @@ async function tokenRequest(params: Record<string, string>) {
     method: 'POST',
     headers: { authorization: `Basic ${basic}`, 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const data = (await res.json().catch(() => null)) as
     | { access_token: string; refresh_token: string; expires_in: number; error?: string; error_description?: string }
@@ -92,13 +95,19 @@ export async function hueCallback(code: string, state: string) {
   await ensureAppKey();
 }
 
+// Refresh-token byttes ut ved hver fornyelse: parallelle kall må dele én fornyelse, ellers bruker de samme token flere ganger
+let refreshing: Promise<string> | null = null;
+
 async function accessToken() {
   const s = await load();
   if (!s) throw new HueError(409, 'Hue er ikke koblet til ennå');
   if (Date.now() < s.expiresAt - 5 * 60_000) return s.accessToken;
-  const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: s.refreshToken });
-  await save({ ...s, accessToken: t.access_token, refreshToken: t.refresh_token, expiresAt: Date.now() + t.expires_in * 1000 });
-  return t.access_token;
+  refreshing ??= (async () => {
+    const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: s.refreshToken });
+    await save({ ...(await load())!, accessToken: t.access_token, refreshToken: t.refresh_token, expiresAt: Date.now() + t.expires_in * 1000 });
+    return t.access_token;
+  })().finally(() => (refreshing = null));
+  return refreshing;
 }
 
 /** «Trykker» link-knappen via skyen og registrerer en bro-bruker (hue-application-key). */
@@ -162,6 +171,7 @@ async function clipRaw<T>(method: 'GET' | 'PUT', resource: string, body?: unknow
       ...(body ? { 'content-type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (res.status === 401 && !retried) {
     // Token kan være trukket tilbake – tving fornyelse én gang
