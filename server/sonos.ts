@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fetchRetry } from './net.ts';
 
 const AUTH = 'https://api.sonos.com/login/v3/oauth';
 const CONTROL = 'https://api.ws.sonos.com/control/api/v1';
@@ -70,7 +71,7 @@ export function sonosAuthorizeUrl() {
 
 async function token(params: Record<string, string>) {
   const basic = Buffer.from(`${process.env.SONOS_CLIENT_ID}:${process.env.SONOS_CLIENT_SECRET}`).toString('base64');
-  const res = await fetch(`${AUTH}/access`, {
+  const res = await fetchRetry(`${AUTH}/access`, {
     method: 'POST',
     headers: { authorization: `Basic ${basic}`, 'content-type': 'application/x-www-form-urlencoded;charset=utf-8' },
     body: new URLSearchParams(params),
@@ -130,7 +131,7 @@ let blockedUntil = 0;
 
 async function api<T>(method: 'GET' | 'POST', p: string, body?: unknown, retried = false): Promise<T> {
   if (Date.now() < blockedUntil) throw new SonosError(429, 'Sonos-kvoten (20 000 kall/døgn) er brukt opp – prøver igjen om litt');
-  const res = await fetch(CONTROL + p, {
+  const res = await fetchRetry(CONTROL + p, {
     method,
     headers: { authorization: `Bearer ${await accessToken()}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fetchRetry } from './net.ts';
 
 const MILL_API_BASE = process.env.MILL_API_BASE ?? 'https://api.millnorwaycloud.com';
 const SESSION_FILE = path.resolve('data', 'sessions.json');
@@ -94,7 +95,7 @@ export async function loadSessions() {
 // --- lavnivå HTTP mot Mill ---
 
 async function call(method: string, urlPath: string, token: string | undefined, body?: unknown) {
-  const res = await fetch(MILL_API_BASE + urlPath, {
+  const res = await fetchRetry(MILL_API_BASE + urlPath, {
     method,
     headers: {
       accept: 'application/json',

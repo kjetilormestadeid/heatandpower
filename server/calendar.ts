@@ -1,6 +1,8 @@
 // Kalender fra ICS-abonnement(er): henter feeden, utvider gjentakelser og returnerer hendelser i et tidsvindu.
 // URL-ene har ofte en hemmelig token, så de ligger i .env (CALENDAR_ICS_URL, kommaseparert for flere).
 
+import { fetchRetry } from './net.ts';
+
 const CACHE_MS = 15 * 60_000;
 const FRESH_MIN_MS = 30_000; // «Oppdater» henter på nytt, men ikke oftere enn dette
 const DAY = 86_400_000;
@@ -39,7 +41,7 @@ const cache = new Map<string, { at: number; text: string }>();
 async function fetchIcs(url: string, fresh: boolean) {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < (fresh ? FRESH_MIN_MS : CACHE_MS)) return hit.text;
-  const res = await fetch(url, { headers: { 'user-agent': 'mill-dashboard/0.1', accept: 'text/calendar' } });
+  const res = await fetchRetry(url, { headers: { 'user-agent': 'mill-dashboard/0.1', accept: 'text/calendar' } });
   if (!res.ok) {
     // Bruk forrige versjon heller enn å tømme kalenderen ved et midlertidig brudd
     if (hit) return hit.text;

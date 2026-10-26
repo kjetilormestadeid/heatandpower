@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fetchRetry } from './net.ts';
 
 const HUE = 'https://api.meethue.com';
 const STORE = path.resolve('data/hue.json');
@@ -71,7 +72,7 @@ export function hueAuthorizeUrl() {
 
 async function tokenRequest(params: Record<string, string>) {
   const basic = Buffer.from(`${process.env.HUE_CLIENT_ID}:${process.env.HUE_CLIENT_SECRET}`).toString('base64');
-  const res = await fetch(`${HUE}/v2/oauth2/token`, {
+  const res = await fetchRetry(`${HUE}/v2/oauth2/token`, {
     method: 'POST',
     headers: { authorization: `Basic ${basic}`, 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(params),
@@ -116,8 +117,8 @@ async function ensureAppKey() {
   if (s?.appKey) return s.appKey;
   const token = await accessToken();
   const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
-  await fetch(`${HUE}/route/api/0/config`, { method: 'PUT', headers, body: JSON.stringify({ linkbutton: true }) });
-  const res = await fetch(`${HUE}/route/api`, { method: 'POST', headers, body: JSON.stringify({ devicetype: 'mill-dashboard#server' }) });
+  await fetchRetry(`${HUE}/route/api/0/config`, { method: 'PUT', headers, body: JSON.stringify({ linkbutton: true }) });
+  const res = await fetchRetry(`${HUE}/route/api`, { method: 'POST', headers, body: JSON.stringify({ devicetype: 'mill-dashboard#server' }) });
   const body = (await res.json().catch(() => null)) as { success?: { username: string }; error?: { description: string } }[] | null;
   const key = body?.[0]?.success?.username;
   if (!key) throw new HueError(502, `Fikk ikke nøkkel fra Hue-broen: ${body?.[0]?.error?.description ?? res.status}`);
@@ -163,7 +164,7 @@ async function clip<T>(method: 'GET' | 'PUT', resource: string, body?: unknown, 
 }
 
 async function clipRaw<T>(method: 'GET' | 'PUT', resource: string, body?: unknown, retried = false): Promise<T> {
-  const res = await fetch(`${HUE}/route/clip/v2/resource/${resource}`, {
+  const res = await fetchRetry(`${HUE}/route/clip/v2/resource/${resource}`, {
     method,
     headers: {
       authorization: `Bearer ${await accessToken()}`,

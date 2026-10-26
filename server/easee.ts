@@ -1,5 +1,7 @@
 // Easee Cloud API: https://developer.easee.com/
 // Innlogging med brukernavn/passord fra .env; token holdes kun her på serveren.
+import { fetchRetry } from './net.ts';
+
 const EASEE_URL = 'https://api.easee.com';
 
 export class EaseeError extends Error {
@@ -29,7 +31,7 @@ function saveToken(t: TokenResponse) {
 }
 
 async function post<T>(path: string, body: unknown, auth?: string): Promise<T> {
-  const res = await fetch(EASEE_URL + path, {
+  const res = await fetchRetry(EASEE_URL + path, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(auth ? { authorization: `Bearer ${auth}` } : {}) },
     body: JSON.stringify(body),
@@ -76,7 +78,7 @@ async function accessToken(): Promise<string> {
 }
 
 async function request<T>(method: 'GET' | 'POST', path: string, retried = false): Promise<T> {
-  const res = await fetch(EASEE_URL + path, { method, headers: { authorization: `Bearer ${await accessToken()}` } });
+  const res = await fetchRetry(EASEE_URL + path, { method, headers: { authorization: `Bearer ${await accessToken()}` } });
   if (res.status === 401 && !retried) {
     token = null;
     return request<T>(method, path, true);

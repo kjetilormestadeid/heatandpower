@@ -1,3 +1,5 @@
+import { fetchRetry } from './net.ts';
+
 const TIBBER_URL = 'https://api.tibber.com/v1-beta/gql';
 const CACHE_MS = 5 * 60_000;
 
@@ -22,7 +24,7 @@ async function gql<T>(query: string, variables: Record<string, unknown> = {}): P
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.data as T;
 
-  const res = await fetch(TIBBER_URL, {
+  const res = await fetchRetry(TIBBER_URL, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${token}`,
