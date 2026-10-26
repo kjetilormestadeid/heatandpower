@@ -190,5 +190,7 @@ cat <<EOF
 
  4. Start nettbrettet på nytt og sjekk at panelet kommer opp av seg selv.
 
- Oppdatering senere: kjør dette skriptet på nytt.
+ Oppdatering: serveren henter ny kode fra git selv (hvert 10. min, endres med
+ HEATANDPOWER_UPDATE_INTERVAL i sekunder, 0 = av). Kjør dette skriptet på nytt
+ hvis noe må settes opp på nytt.
 EOF

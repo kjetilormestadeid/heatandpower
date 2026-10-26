@@ -56,4 +56,4 @@ sh ~/heatandpower/scripts/setup-android.sh
 ```
 
 Skriptet kan kjøres på nytt for å oppdatere. Logg: `~/heatandpower.log`. Stopp: `kill $(cat ~/.heatandpower.pid)`.
-Husk `npm run build` og å sjekke inn `dist/` på PC-en før du oppdaterer nettbrettet.
+Nettbrettet ser etter ny kode i git hvert 10. minutt (`HEATANDPOWER_UPDATE_INTERVAL` i sekunder, `0` slår det av), henter den, kjører `npm ci` ved endrede avhengigheter og starter serveren på nytt. Husk derfor `npm run build` og å sjekke inn `dist/` før du pusher.
