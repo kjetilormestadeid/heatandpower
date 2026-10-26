@@ -28,8 +28,11 @@ die() { log "FEIL: $*"; printf 'Feil: %s\n' "$*" >&2; exit 1; }
 [ -f "$APP_DIR/package.json" ] || die "Fant ikke HeatAndPower i $APP_DIR (sett HEATANDPOWER_DIR)."
 [ -f "$APP_DIR/.env" ] || die "Mangler $APP_DIR/.env – kjør scripts/setup-android.sh først."
 [ -f "$APP_DIR/dist/index.html" ] || die "Mangler $APP_DIR/dist/index.html."
-TSX="$APP_DIR/node_modules/.bin/tsx"
-[ -x "$TSX" ] || die "Fant ikke tsx – kjør scripts/setup-android.sh (npm ci) først."
+# tsx kjøres med node direkte: shebangen «#!/usr/bin/env node» virker bare når
+# termux-exec er lastet, og det er den ikke når Termux:Boot starter skriptet.
+TSX="$APP_DIR/node_modules/tsx/dist/cli.mjs"
+[ -f "$TSX" ] || die "Fant ikke tsx – kjør scripts/setup-android.sh (npm ci) først."
+command -v node >/dev/null 2>&1 || die "Fant ikke node i PATH ($PATH)."
 
 # Én instans: PID-fila opprettes atomisk (noclobber). Ligger det en gammel fil
 # etter krasj/strømbrudd, ryddes den bort.
@@ -160,7 +163,7 @@ while [ "$stopping" = 0 ]; do
   log "Starter server (PID-fil $PID_FILE) …"
   # Tilsvarer «npm start», men uten npm som mellomledd så signaler når fram
   set +e
-  "$TSX" --env-file-if-exists=.env server/index.ts >> "$LOG_FILE" 2>&1 &
+  node "$TSX" --env-file-if-exists=.env server/index.ts >> "$LOG_FILE" 2>&1 &
   child=$!
   wait_child
   status=$?
