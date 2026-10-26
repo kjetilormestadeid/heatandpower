@@ -50,8 +50,9 @@ info "Oppgraderer Termux-pakker (pkg upgrade) …"
 pkg upgrade -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
   || die "$E_PKG" "pkg upgrade feilet. Prøv «termux-change-repo», og kjør skriptet på nytt."
 
-info "Installerer pakker (git, Node.js) …"
-pkgs="git"
+info "Installerer pakker (git, openssh, Node.js) …"
+# openssh: sshd på port 8022 for fjernhjelp (USB via «adb forward» eller Wi-Fi)
+pkgs="git openssh"
 if command -v node >/dev/null 2>&1; then
   info "Node er allerede installert, hopper over Node-pakken."
 else
@@ -144,6 +145,7 @@ cat > "$tmp" <<EOF || die "$E_FILES" "Kunne ikke skrive $BOOT_SCRIPT."
 #!/data/data/com.termux/files/usr/bin/sh
 # Generert av scripts/setup-android.sh – kjøres av Termux:Boot ved oppstart.
 termux-wake-lock 2>/dev/null || true
+sshd 2>/dev/null || true
 export HEATANDPOWER_DIR="$APP_DIR"
 exec sh "$APP_DIR/scripts/start-android.sh"
 EOF
@@ -176,7 +178,7 @@ cat <<EOF
       «Ubegrenset» / slå av batterioptimalisering.
 
  2. Test uten omstart:
-      sh $APP_DIR/scripts/start-android.sh &
+      nohup sh $APP_DIR/scripts/start-android.sh >/dev/null 2>&1 &
       tail -f ~/heatandpower.log
     Åpne http://localhost:$port i nettleseren. Stopp med:
       kill \$(cat ~/.heatandpower.pid)
@@ -189,6 +191,12 @@ cat <<EOF
     - Kiosk Mode → aktiver når alt fungerer.
 
  4. Start nettbrettet på nytt og sjekk at panelet kommer opp av seg selv.
+
+ SSH (startes ved oppstart, port 8022, bruker $(whoami)):
+    - Sett passord én gang med «passwd», eller legg en offentlig nøkkel i
+      ~/.ssh/authorized_keys.
+    - Over USB fra PC-en: adb forward tcp:8022 tcp:8022
+                          ssh -p 8022 $(whoami)@127.0.0.1
 
  Oppdatering: serveren henter ny kode fra git selv (hvert 10. min, endres med
  HEATANDPOWER_UPDATE_INTERVAL i sekunder, 0 = av). Kjør dette skriptet på nytt
