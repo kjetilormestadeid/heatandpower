@@ -147,7 +147,7 @@ const applianceToActive = (a: AppliancesResponse['appliances'][number]): ActiveD
   isConnected: true, isEnabled: a.on, power: a.on ? a.watts : 0, estimated: true,
 });
 
-const fmtW = (w: number) => (w >= 1000 ? `${(w / 1000).toLocaleString('nb-NO', { maximumFractionDigits: 2 })} kW` : `${w} W`);
+export const fmtW = (w: number) => (w >= 1000 ? `${(w / 1000).toLocaleString('nb-NO', { maximumFractionDigits: 2 })} kW` : `${w} W`);
 
 /** Ren visning: samlet effekt, enheter som trekker strøm, og resten gruppert etter status. */
 export function ActiveNowView({

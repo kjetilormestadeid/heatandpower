@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { Device, EaseeCharger, EaseeState, HueGroup, Room, SonosOverview, TibberConsumption, TibberLive } from '../types';
+import type { Device, EaseeCharger, EaseeState, HueGroup, HueLight, Room, SonosOverview, TibberConsumption, TibberLive } from '../types';
 import { MODE_LABEL, fmtTemp } from '../format';
 import { dayCost } from '../pricing';
 import { Icon } from './Icon';
 import { easeeMode } from './EaseeSection';
+import { fmtW } from './ActiveNow';
+import { hueWatts } from './HueSection';
 import { CalendarTicker } from './CalendarDrawer';
 import { OFF, useServicePoll } from '../useServicePoll';
 
@@ -28,6 +30,20 @@ export function QuickPanel({
   refreshKey?: unknown;
   onRoomsChanged: () => void;
 }) {
+  // Effekt nå per rom fra Mill-ovnene – ett kall per rom, så roligere enn rommene selv (2500 kall/time)
+  const roomKey = rooms?.map((r) => r.id).join('|') ?? '';
+  const { data: roomPower } = useServicePoll<Record<string, number>>(
+    async () => {
+      const ids = roomKey ? roomKey.split('|') : [];
+      const lists = await Promise.all(ids.map((id) => api.roomDevices(id).then((r) => [id, r.devices] as const)));
+      return Object.fromEntries(
+        lists.map(([id, ds]) => [id, ds.reduce((s, d) => s + (d.isConnected ? Math.max(0, Math.round(d.lastMetrics?.currentPower ?? 0)) : 0), 0)]),
+      );
+    },
+    2 * 60_000,
+    [roomKey, refreshKey],
+  );
+
   return (
     <section className="card quick">
       <div className="quick-top">
@@ -39,7 +55,7 @@ export function QuickPanel({
         <QuickLights />
         <QuickSonos />
         {rooms?.map((r) => (
-          <HeatTile key={r.id} room={r} stale={roomsDown} onChanged={onRoomsChanged} />
+          <HeatTile key={r.id} room={r} power={roomPower?.[r.id] ?? null} stale={roomsDown} onChanged={onRoomsChanged} />
         ))}
         {independentCount > 0 && <QuickDevices houseId={houseId} refreshKey={refreshKey} />}
       </div>
@@ -173,11 +189,17 @@ function QuickCharging() {
 /** Av/på-fliser per Hue-rom, pluss en flis som slår av alt. Vises bare når Hue er koblet til. */
 function QuickLights() {
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { data: groups, down, burst } = useServicePoll<HueGroup[]>(
-    async () => ((await api.hueStatus()).connected ? (await api.hueGroups()).groups : OFF),
+  // Lampene trengs for estimert effekt per rom (Hue måler ikke strøm selv)
+  const { data, down, burst } = useServicePoll<{ groups: HueGroup[]; lights: HueLight[] }>(
+    async () => {
+      if (!(await api.hueStatus()).connected) return OFF;
+      const [g, l] = await Promise.all([api.hueGroups(), api.hueLights()]);
+      return { groups: g.groups, lights: l.lights };
+    },
     60_000,
     [],
   );
+  const groups = data?.groups;
   const { expect, shown, pending } = useExpected<boolean>((id) => groups?.find((g) => g.id === id)?.on);
 
   async function toggle(g: HueGroup, on: boolean) {
@@ -190,9 +212,10 @@ function QuickLights() {
     burst();
   }
 
-  if (!groups) return null;
+  if (!data || !groups) return null;
   const home = groups.find((g) => g.kind === 'home');
   const roomGroups = groups.filter((g) => g.kind === 'room');
+  const watts = (room?: string) => data.lights.filter((l) => !room || l.room === room).reduce((s, l) => s + hueWatts(l), 0);
 
   return (
     <>
@@ -200,6 +223,7 @@ function QuickLights() {
         <LightTile
           key={g.id}
           group={g}
+          watts={watts(g.name)}
           on={shown(g.id, g.on)}
           pending={pending(g.id)}
           stale={down}
@@ -220,6 +244,7 @@ function QuickLights() {
             <span className="quick-name">Alt lys</span>
           </span>
           <strong className="quick-value">Slå av</strong>
+          {watts() > 0 && <span className="muted small">≈ {fmtW(watts())} nå</span>}
         </button>
       )}
     </>
@@ -228,9 +253,11 @@ function QuickLights() {
 
 const DIM_STEP = 10;
 
-/** Ett Hue-rom: trykk slår av/på, −/+ dimmer i steg på 10 % (og slår på). */
-function LightTile({ group: g, on, pending, stale, busy, onToggle, onDimmed }: {
+/** Ett Hue-rom: trykk slår av/på, −/+ dimmer i steg på 10 % (og slår på). Viser estimert effekt når lyset er på. */
+function LightTile({ group: g, watts, on, pending, stale, busy, onToggle, onDimmed }: {
   group: HueGroup;
+  /** estimert effekt nå for lampene i rommet */
+  watts: number;
   on: boolean;
   pending: boolean;
   stale: boolean;
@@ -280,7 +307,7 @@ function LightTile({ group: g, on, pending, stale, busy, onToggle, onDimmed }: {
           <span className="quick-name">{g.name}</span>
         </span>
         <strong className="quick-value">{lit ? (level != null ? `${level} %` : 'På') : 'Av'}</strong>
-        <span className="small">{pending ? (on ? 'Slår på …' : 'Slår av …') : error ? 'Ikke lagret – prøv igjen' : 'Lys'}</span>
+        <span className="small">{pending ? (on ? 'Slår på …' : 'Slår av …') : error ? 'Ikke lagret – prøv igjen' : on && watts > 0 ? `Lys · ≈ ${fmtW(watts)}` : 'Lys'}</span>
       </button>
       {canDim && (
         <div className="quick-heat-btns">
@@ -493,8 +520,8 @@ function Stale() {
   );
 }
 
-/** Rommets temperatur og luftfuktighet nå, og settpunktet for modusen som gjelder akkurat nå, med −/+ knapper. */
-function HeatTile({ room, stale, onChanged }: { room: Room; stale: boolean; onChanged: () => void }) {
+/** Rommets temperatur og luftfuktighet nå, ovnenes effekt nå, og settpunktet for modusen som gjelder akkurat nå, med −/+ knapper. */
+function HeatTile({ room, power, stale, onChanged }: { room: Room; power: number | null; stale: boolean; onChanged: () => void }) {
   const effective = room.mode === 'weekly_program' ? room.activeModeFromWeeklyProgram : room.mode;
   const key: TempKey = effective === 'sleep' ? 'roomSleepTemperature' : effective === 'away' ? 'roomAwayTemperature' : 'roomComfortTemperature';
   const [target, setTarget] = useState<number | null>(room[key]);
@@ -547,6 +574,7 @@ function HeatTile({ room, stale, onChanged }: { room: Room; stale: boolean; onCh
       <span className="muted small">
         {MODE_LABEL[effective ?? 'weekly_program']}
         {target != null && effective !== 'off' ? ` · mål ${fmtTemp(target)}` : ''}
+        {power != null && power > 0 && ` · ${fmtW(power)}`}
       </span>
       <div className="quick-heat-btns">
         <button aria-label={`Senk temperaturen i ${room.name}`} disabled={!canChange} onClick={() => adjust(-0.5)}>
