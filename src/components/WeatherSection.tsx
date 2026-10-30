@@ -385,7 +385,8 @@ export function WeatherView({ forecast, place, stale }: { forecast: Forecast; pl
   );
 }
 
-const QUICK_HOURS = 6;
+// Så mange timer som får plass vises – resten brytes bort i CSS
+const QUICK_HOURS = 12;
 const showWeatherSection = () =>
   document.getElementById('weather')?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' });
 
