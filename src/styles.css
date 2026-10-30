@@ -657,8 +657,8 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 
 /* Topplinjen krymper i stedet for å flyte over: dato og «Oppdatert» først ut, så kortere kalendertekst */
 .clock-time { font-size: clamp(1.3rem, 3vw, 1.9rem); }
-.topbar .clock, .topbar .cal-toggle { min-width: 0; }
+.topbar .cal-toggle { min-width: 0; }
 .topbar > button, .topbar > .brand, .topbar > .pill, .house-select { flex-shrink: 0; white-space: nowrap; }
 .topbar .cal-toggle { flex: 0 1 260px; }
 @media (max-width: 900px) { .topbar .clock-date, .topbar > .hide-sm { display: none; } }
-@media (max-width: 600px) { .topbar .cal-toggle { flex: none; } }
+@media (max-width: 600px) { .topbar { flex-wrap: wrap; row-gap: 8px; } .topbar .cal-toggle { flex: none; } }
