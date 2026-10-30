@@ -15,6 +15,7 @@ import { EnergySum } from './EnergySum';
 import { PresenceSection } from './PresenceSection';
 import { SonosSection } from './SonosSection';
 import { DiagnosticsSection } from './DiagnosticsSection';
+import { WeatherSection } from './WeatherSection';
 import { QuickPanel } from './QuickPanel';
 import { Clock } from './Clock';
 import { BURST_MS, pollWithBackoff } from '../useServicePoll';
@@ -168,6 +169,8 @@ export function Dashboard({ user, onLogout }: { user: string; onLogout: () => vo
             }}
           />
         )}
+
+        <WeatherSection />
 
         <PresenceSection />
 

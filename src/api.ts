@@ -28,6 +28,9 @@ import type {
   PowerSample,
   IdentifyAnalysis,
   PowerStepRaw,
+  WeatherPlaces,
+  PlaceHit,
+  Forecast,
 } from './types';
 
 export class ApiError extends Error {
@@ -163,6 +166,14 @@ export const api = {
   calendarStatus: () => request<{ configured: boolean }>('GET', '/api/calendar/status'),
   calendarEvents: (days: number, fresh = false) =>
     request<{ events: CalendarEvent[] }>('GET', `/api/calendar/events?days=${days}${fresh ? '&fresh=1' : ''}`),
+
+  weatherPlaces: () => request<WeatherPlaces>('GET', '/api/weather/places'),
+  addWeatherPlace: (p: PlaceHit) => request<WeatherPlaces>('POST', '/api/weather/places', p),
+  selectWeatherPlace: (id: string) => request<WeatherPlaces>('PUT', '/api/weather/places/selected', { id }),
+  removeWeatherPlace: (id: string) => request<WeatherPlaces>('DELETE', `/api/weather/places/${encodeURIComponent(id)}`),
+  searchWeatherPlaces: (q: string) => request<{ places: PlaceHit[] }>('GET', `/api/weather/search?q=${encodeURIComponent(q)}`),
+  nearestWeatherPlace: (lat: number, lon: number) => request<{ place: PlaceHit }>('GET', `/api/weather/nearest?lat=${lat}&lon=${lon}`),
+  forecast: (lat: number, lon: number) => request<Forecast>('GET', `/api/weather/forecast?lat=${lat}&lon=${lon}`),
 
   millNetworkDiagnostics: () => request<MillNetworkDiagnostics>('GET', '/api/diagnostics/mill-network'),
 

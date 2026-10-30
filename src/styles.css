@@ -601,3 +601,27 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .power-curve .now-dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); }
 .known-appliances { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .known-appliances li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Vær (MET/yr.no) */
+.weather a { color: var(--accent); }
+.wx-symbol { display: block; flex-shrink: 0; }
+.wx-now { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.wx-warm { color: var(--heat); }
+.wx-cold { color: var(--accent); }
+.wx-precip { color: var(--accent); font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.wx-hours { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; border-top: 1px solid var(--border); padding-top: 12px; }
+.wx-hour { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; font-variant-numeric: tabular-nums; }
+.wx-days { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.wx-days li { display: grid; grid-template-columns: 1fr 40px 90px 60px; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.wx-days li:last-child { border-bottom: none; }
+.wx-day-name::first-letter { text-transform: uppercase; }
+.wx-range { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.wx-days .wx-precip { text-align: right; }
+.wx-picker { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px; }
+.wx-search { display: flex; gap: 8px; flex-wrap: wrap; }
+.wx-search input { flex: 1; min-width: 180px; }
+.wx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wx-hit { width: 100%; display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+.wx-saved { display: flex; align-items: center; gap: 8px; }
+.wx-saved label { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.wx-saved button { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }

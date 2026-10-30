@@ -27,6 +27,7 @@ Produksjon: `npm run build && npm start` (Express serverer `dist/` på `PORT`).
 - Strømforbruk per dag for valgt måned, kostnad og fordeling per rom
 - Gi rom nytt navn, velg ukeprogram per rom, rediger ukeprogrammer
 - Tidsplaner (av/på-timere) for enheter uten rom, f.eks. stikkontakter
+- Vær fra yr.no (MET Locationforecast): nå, neste 12 timer og neste dager. Velg sted med søk (Kartverkets stedsnavn) eller «Bruk min posisjon»; lagrede steder ligger i `data/weather.json`
 - Tibber: strømpris nå/i dag/i morgen (time eller 15 min), billigste periode fremover, forbruk og kostnad siste 30 dager
 
 ## Tibber

@@ -11,6 +11,7 @@ import { humidityRules, saveHumidityRule, startAutomations } from './automation.
 import { DecoError, decoConfigured, decoOverview, decoSetOwner } from './deco.ts';
 import { EaseeError, easeeCharger, easeeChargers, easeeCommand, easeeConfigured, isEaseeCommand } from './easee.ts';
 import { CalendarError, calendarConfigured, calendarEvents } from './calendar.ts';
+import { WeatherError, addPlace, forecast, nearestPlace, removePlace, searchPlaces, selectPlace, weatherPlaces } from './weather.ts';
 import { ApplianceError, addAppliance, analyzeIdentify, applianceStates, cancelIdentify, identifySamples, removeAppliance, setApplianceOn, startApplianceTracking, startIdentify } from './appliances.ts';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -158,6 +159,43 @@ app.get('/api/calendar/events', requireSession, async (req, res) => {
     else sendError(res, err);
   }
 });
+
+// Vær (MET/yr.no): lagrede steder og varsel for valgt sted
+function sendWeatherError(res: Response, err: unknown) {
+  if (err instanceof WeatherError) res.status(err.status).json({ error: { message: err.message } });
+  else sendError(res, err);
+}
+const weatherRoute = (fn: (req: Request) => Promise<unknown>) => async (req: Request, res: Response) => {
+  try {
+    res.json(await fn(req));
+  } catch (err) {
+    sendWeatherError(res, err);
+  }
+};
+const coord = (v: unknown, max: number) => {
+  const n = Number(v);
+  if (v === undefined || v === '' || !Number.isFinite(n) || Math.abs(n) > max) throw new WeatherError(400, 'Ugyldig posisjon');
+  return n;
+};
+
+app.get('/api/weather/places', requireSession, weatherRoute(() => weatherPlaces()));
+app.post('/api/weather/places', requireSession, weatherRoute(async (req) => {
+  const { name, detail } = req.body ?? {};
+  if (typeof name !== 'string') throw new WeatherError(400, 'Forventet { name, lat, lon }');
+  return addPlace({ name, detail: typeof detail === 'string' ? detail : '', lat: coord(req.body.lat, 90), lon: coord(req.body.lon, 180) });
+}));
+app.put('/api/weather/places/selected', requireSession, weatherRoute(async (req) => {
+  if (typeof req.body?.id !== 'string') throw new WeatherError(400, 'Forventet { id: string }');
+  return selectPlace(req.body.id);
+}));
+app.delete('/api/weather/places/:id', requireSession, weatherRoute((req) => removePlace(String(req.params.id))));
+app.get('/api/weather/search', requireSession, weatherRoute(async (req) => {
+  const q = String(req.query.q ?? '').trim();
+  return { places: q.length < 2 ? [] : await searchPlaces(q.slice(0, 80)) };
+}));
+app.get('/api/weather/nearest', requireSession, weatherRoute(async (req) =>
+  ({ place: await nearestPlace(coord(req.query.lat, 90), coord(req.query.lon, 180)) })));
+app.get('/api/weather/forecast', requireSession, weatherRoute((req) => forecast(coord(req.query.lat, 90), coord(req.query.lon, 180))));
 
 // Easee: brukernavn/passord ligger i .env; kun innloggede brukere av siten får lese/styre.
 function sendEaseeError(res: Response, err: unknown) {

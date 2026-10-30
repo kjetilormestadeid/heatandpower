@@ -373,3 +373,31 @@ export interface IdentifyAnalysis {
   explanation: string;
   source: 'ai' | 'local';
 }
+
+// Vær (MET/yr.no via backend)
+export interface WeatherPlace {
+  id: string;
+  name: string;
+  detail: string;
+  lat: number;
+  lon: number;
+}
+export interface WeatherPlaces {
+  places: WeatherPlace[];
+  selectedId: string | null;
+}
+export type PlaceHit = Omit<WeatherPlace, 'id'>;
+export interface ForecastStep {
+  time: string;
+  temp: number | null;
+  wind: number | null;
+  windDir: number | null;
+  humidity: number | null;
+  symbol: string | null;
+  precip: number | null;
+  hours: 1 | 6;
+}
+export interface Forecast {
+  updatedAt: string;
+  steps: ForecastStep[];
+}
