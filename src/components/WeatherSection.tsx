@@ -35,7 +35,7 @@ const SYMBOL_TEXT: Record<string, string> = {
   snow: 'Snø',
   heavysnow: 'Kraftig snø',
 };
-function symbolText(code: string | null) {
+export function symbolText(code: string | null) {
   if (!code) return '';
   const base = code.split('_')[0];
   const thunder = base.endsWith('andthunder');
@@ -47,12 +47,12 @@ const WIND_DIRS = ['nord', 'nordøst', 'øst', 'sørøst', 'sør', 'sørvest', '
 const windFrom = (deg: number) => WIND_DIRS[Math.round(deg / 45) % 8];
 
 const num = (v: number, digits = 0) => v.toLocaleString('nb-NO', { maximumFractionDigits: digits, minimumFractionDigits: digits });
-const deg = (v: number | null) => (v == null ? '–' : `${num(v)}°`);
+export const deg = (v: number | null) => (v == null ? '–' : `${num(v)}°`);
 const mm = (v: number) => `${num(v, 1)} mm`;
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' });
+export const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' });
 
 /** yr sine offisielle værsymboler (metno/weathericons, CC BY 4.0) */
-function WxSymbol({ code, size }: { code: string | null; size: number }) {
+export function WxSymbol({ code, size }: { code: string | null; size: number }) {
   if (!code) return <span style={{ width: size, height: size }} />;
   return (
     <img
@@ -66,25 +66,31 @@ function WxSymbol({ code, size }: { code: string | null; size: number }) {
   );
 }
 
-/** Vær for valgt sted fra MET (yr.no): nå, neste timer og neste dager. Stedet velges med søk eller egen posisjon. */
-export function WeatherSection() {
+// Hurtigpanelet og værseksjonen henter steder hver for seg; et bytte i den ene sier fra til den andre
+const PLACES_EVENT = 'weather-places';
+
+/** Lagrede steder og varsel for valgt sted. Delt av værseksjonen og hurtigpanelet. */
+export function useWeather() {
   const [store, setStore] = useState<WeatherPlaces | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
 
-  useEffect(
-    () =>
-      retryUntilOk(() =>
-        api.weatherPlaces().then(
-          (s) => (setStore(s), setError(null), s.places.length === 0 && setEditing(true)),
-          (e) => {
-            setError(e.message);
-            throw e;
-          },
-        ),
+  useEffect(() => {
+    const stop = retryUntilOk(() =>
+      api.weatherPlaces().then(
+        (s) => (setStore(s), setError(null)),
+        (e) => {
+          setError(e.message);
+          throw e;
+        },
       ),
-    [],
-  );
+    );
+    const onChange = (e: Event) => setStore((e as CustomEvent<WeatherPlaces>).detail);
+    window.addEventListener(PLACES_EVENT, onChange);
+    return () => {
+      stop();
+      window.removeEventListener(PLACES_EVENT, onChange);
+    };
+  }, []);
 
   const place = store?.places.find((p) => p.id === store.selectedId) ?? null;
   const { data, down } = useServicePoll<{ placeId: string; forecast: Forecast }>(
@@ -98,16 +104,29 @@ export function WeatherSection() {
   async function update(fn: () => Promise<WeatherPlaces>) {
     setError(null);
     try {
-      setStore(await fn());
+      const s = await fn();
+      window.dispatchEvent(new CustomEvent(PLACES_EVENT, { detail: s }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kunne ikke lagre');
     }
   }
 
+  return { store, place, forecast, down, error, update };
+}
+
+/** Vær for valgt sted fra MET (yr.no): nå, neste timer og neste dager. Stedet velges med søk eller egen posisjon. */
+export function WeatherSection() {
+  const { store, place, forecast, down, error, update } = useWeather();
+  const [editing, setEditing] = useState(false);
+  // Uten lagrede steder åpnes stedsvelgeren med en gang
+  useEffect(() => {
+    if (store?.places.length === 0) setEditing(true);
+  }, [store?.places.length]);
+
   if (!store && !error) return null;
 
   return (
-    <section className="card energy weather">
+    <section className="card energy weather" id="weather">
       <div className="section-head">
         <h2>Vær</h2>
         {store && store.places.length > 1 ? (
@@ -363,5 +382,69 @@ export function WeatherView({ forecast, place, stale }: { forecast: Forecast; pl
         {stale && ' – ingen kontakt nå, viser siste varsel'}
       </p>
     </>
+  );
+}
+
+const QUICK_HOURS = 6;
+const showWeatherSection = () =>
+  document.getElementById('weather')?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' });
+
+/** Kompakt vær på startsiden: nå, de neste timene og valg av sted. Trykk åpner værseksjonen. */
+export function QuickWeather() {
+  const { store, place, forecast, down, update } = useWeather();
+  if (!store) return null;
+
+  if (!place) {
+    return (
+      <button className="quick-weather quick-weather-empty" onClick={showWeatherSection}>
+        <span className="muted small">Vær</span>
+        <span>Velg sted …</span>
+      </button>
+    );
+  }
+
+  const now = Date.now();
+  const upcoming = forecast?.steps.filter((s) => new Date(s.time).getTime() + 3600_000 > now) ?? [];
+  const cur = upcoming[0];
+  const next = upcoming.slice(1).filter((s) => s.hours === 1).slice(0, QUICK_HOURS);
+
+  return (
+    <div className={`quick-weather ${down ? 'stale' : ''}`}>
+      <div className="quick-weather-now">
+        <button className="quick-weather-open" onClick={showWeatherSection} aria-label="Vis værvarselet">
+          <WxSymbol code={cur?.symbol ?? null} size={52} />
+          <strong className={cur?.temp != null && cur.temp < 0 ? 'wx-cold' : 'wx-warm'}>{deg(cur?.temp ?? null)}</strong>
+        </button>
+        <div className="quick-weather-meta">
+          {store.places.length > 1 ? (
+            <select
+              value={store.selectedId ?? ''}
+              onChange={(e) => update(() => api.selectWeatherPlace(e.target.value))}
+              aria-label="Velg sted for været"
+            >
+              {store.places.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="muted small">{place.name}</span>
+          )}
+          <span className="small">{cur ? symbolText(cur.symbol) : forecast ? '' : 'Henter …'}</span>
+        </div>
+      </div>
+      {next.length > 0 && (
+        <button className="quick-weather-hours" onClick={showWeatherSection} aria-label="Neste timer – vis værvarselet">
+          {next.map((s) => (
+            <span key={s.time} className="quick-weather-hour">
+              <span className="muted small">{hhmm(s.time).slice(0, 2)}</span>
+              <WxSymbol code={s.symbol} size={26} />
+              <span className={`small ${s.temp != null && s.temp < 0 ? 'wx-cold' : ''}`}>{deg(s.temp)}</span>
+            </span>
+          ))}
+        </button>
+      )}
+    </div>
   );
 }

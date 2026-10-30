@@ -8,6 +8,7 @@ import { easeeMode } from './EaseeSection';
 import { fmtW } from './ActiveNow';
 import { hueWatts } from './HueSection';
 import { CalendarTicker } from './CalendarDrawer';
+import { QuickWeather } from './WeatherSection';
 import { OFF, useServicePoll } from '../useServicePoll';
 
 type TempKey = 'roomComfortTemperature' | 'roomSleepTemperature' | 'roomAwayTemperature';
@@ -48,6 +49,7 @@ export function QuickPanel({
     <section className="card quick">
       <div className="quick-top">
         <QuickEnergy rooms={rooms} />
+        <QuickWeather />
         <CalendarTicker />
       </div>
       <div className="quick-grid">

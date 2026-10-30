@@ -625,3 +625,22 @@ button.quick-tile:active:not(:disabled) { transform: scale(0.97); }
 .wx-saved { display: flex; align-items: center; gap: 8px; }
 .wx-saved label { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
 .wx-saved button { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }
+
+/* vær på startsiden */
+.quick-weather {
+  flex: 0 1 auto; min-width: 0; height: 96px; padding: 8px 12px;
+  display: flex; align-items: center; gap: 14px;
+  background: var(--bg); border: none; border-radius: 10px; text-align: left;
+}
+.quick-weather.stale { filter: grayscale(0.7); opacity: 0.7; }
+.quick-weather-empty { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; touch-action: manipulation; }
+.quick-weather button { border: none; background: none; padding: 0; touch-action: manipulation; }
+.quick-weather-now { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.quick-weather-open { display: flex; align-items: center; gap: 6px; }
+.quick-weather-open strong { font-size: 1.9rem; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1; }
+.quick-weather-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 150px; }
+.quick-weather-meta select { padding: 2px 6px; font-size: 0.85rem; max-width: 100%; }
+.quick-weather-meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-weather .quick-weather-hours { display: flex; gap: 6px; border-left: 1px solid var(--border); padding-left: 12px; }
+.quick-weather-hour { display: flex; flex-direction: column; align-items: center; gap: 1px; font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) { .quick-weather .quick-weather-hours { display: none; } }
