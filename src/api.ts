@@ -74,6 +74,7 @@ const mill = <T>(method: string, path: string, body?: unknown) => request<T>(met
 
 export const api = {
   me: () => request<{ login: string }>('GET', '/api/auth/me'),
+  version: () => request<{ version: string | null }>('GET', '/api/version'),
   login: (login: string, password: string) => request<{ login: string }>('POST', '/api/auth/login', { login, password }),
   logout: () => request('POST', '/api/auth/logout'),
 

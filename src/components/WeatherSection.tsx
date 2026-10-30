@@ -392,8 +392,17 @@ const showWeatherSection = () =>
 
 /** Kompakt vær på startsiden: nå, de neste timene og valg av sted. Trykk åpner værseksjonen. */
 export function QuickWeather() {
-  const { store, place, forecast, down, update } = useWeather();
-  if (!store) return null;
+  const { store, place, forecast, down, error, update } = useWeather();
+  // Vis flisen også når stedene ikke kan hentes, så det synes at noe er galt
+  if (!store) {
+    if (!error) return null;
+    return (
+      <div className="quick-weather quick-weather-empty stale">
+        <span className="muted small">Vær</span>
+        <span className="small">{error}</span>
+      </div>
+    );
+  }
 
   if (!place) {
     return (

@@ -2,6 +2,8 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { MillError, getSession, loadSessions, millRequest, signIn, signOut } from './mill.ts';
 import { TibberError, tibberConfigured, tibberHomes, tibberLive, tibberOverview } from './tibber.ts';
 import { HueError, hueAuthorizeUrl, hueCallback, hueConfigured, hueConnected, hueDisconnect, hueDimGroup, hueDimLight, hueGroups, hueIdentifyLight, hueLights, hueRenameGroup, hueRenameLight, hueSetGroup, hueSetLight } from './hue.ts';
@@ -520,11 +522,19 @@ app.get('/api/diagnostics/mill-network', requireSession, async (req, res) => {
   }
 });
 
+// Versjon av frontenden: index.html peker på filer med hash i navnet, så den endres med hvert bygg.
+// Nettbrettet laster siden på nytt når denne endres (ny kode hentet fra git), ellers kjører gammel JS videre.
+app.get('/api/version', async (_req, res) => {
+  const html = await readFile(path.resolve('dist/index.html'), 'utf8').catch(() => '');
+  res.set('cache-control', 'no-store').json({ version: isProd && html ? createHash('sha1').update(html).digest('hex').slice(0, 12) : null });
+});
+
 if (isProd) {
   const dist = path.resolve('dist');
   if (existsSync(dist)) {
-    app.use(express.static(dist));
-    app.get('/{*path}', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+    // index.html må alltid sjekkes på nytt, ellers kan nettleseren laste en gammel versjon fra cache
+    app.use(express.static(dist, { setHeaders: (res, file) => file.endsWith('.html') && res.setHeader('cache-control', 'no-cache') }));
+    app.get('/{*path}', (_req, res) => res.set('cache-control', 'no-cache').sendFile(path.join(dist, 'index.html')));
   }
 }
 
